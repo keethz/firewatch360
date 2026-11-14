@@ -1,0 +1,9 @@
+duckdb==2.0.0
+fastapi==0.162.7
+httpx==0.28.1
+pandas==3.1.1
+pyarrow==26.0.1
+pydantic-settings==2.16.3
+pytest==9.2.0
+shapely==2.2.0
+uvicorn==0.54.0
