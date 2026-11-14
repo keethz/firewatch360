@@ -1,10 +1,12 @@
-import { keepPreviousData, useQuery } from '@tanstack/react-query'
+import { keepPreviousData, useQueries, useQuery } from '@tanstack/react-query'
 import { useEffect, useState, type FormEvent } from 'react'
 import { describeAoi, PRESETS, REGION, withAoi, type Aoi } from '../lib/aoi'
 import { getJson } from '../lib/api'
-import type { AnomaliesResponse, HotspotsResponse, NrtResponse } from '../types/api'
+import type { AnomaliesResponse, HotspotsResponse, ImpactResponse, NrtResponse } from '../types/api'
 import CurrentCard from './CurrentCard'
 import FireRiskBrief from './FireRiskBrief'
+import ImpactPanel from './ImpactPanel'
+import { OVERLAYS, type OverlayId, type VectorOverlay } from '../lib/overlays'
 import MapView, { type DrawMode } from './MapView'
 
 const n0 = (v: number) => Math.round(v).toLocaleString()
@@ -24,6 +26,8 @@ export default function ExploreTab({ aoi, setAoi }: Props) {
   const [vegOnly, setVegOnly] = useState(true)
   const [showLive, setShowLive] = useState(false)
   const [liveDays, setLiveDays] = useState(3)
+  const [bufferKm, setBufferKm] = useState(5)
+  const [overlays, setOverlays] = useState<Partial<Record<OverlayId, boolean>>>({ firezone: true, hospitals: true, schools: true, firestations: true })
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === 'Escape' && setMode('none')
@@ -45,6 +49,25 @@ export default function ExploreTab({ aoi, setAoi }: Props) {
   })
 
   const peak = an.data?.rankings.top_months[0]
+  const hasAoi = aoi.kind !== 'region'
+  const impactQs = `start=${start}&end=${end}&buffer_km=${bufferKm}&sensors=${sensorList.join(',')}&min_confidence=${minConf}&vegetation_only=${vegOnly}`
+  const impactQ = useQuery({
+    queryKey: ['impact', aoi, impactQs],
+    queryFn: () => getJson<ImpactResponse>(withAoi('/api/impact', aoi, impactQs)),
+    enabled: hasAoi && sensorList.length > 0 && start <= end,
+    placeholderData: keepPreviousData,
+    staleTime: Infinity,
+  })
+  const vectorIds = OVERLAYS.filter((o) => o.kind === 'vector' && overlays[o.id]).map((o) => o.id as VectorOverlay)
+  const featQs = useQueries({
+    queries: vectorIds.map((id) => ({
+      queryKey: ['impact-features', id, aoi],
+      queryFn: () => getJson<unknown>(withAoi('/api/impact/features', aoi, `layer=${id}`)),
+      enabled: hasAoi,
+      staleTime: Infinity,
+    })),
+  })
+  const impactGeo = Object.fromEntries(vectorIds.map((id, i) => [id, featQs[i]?.data])) as Partial<Record<VectorOverlay, unknown>>
   const liveQ = useQuery({
     queryKey: ['nrt', aoi, liveDays, minConf],
     queryFn: () => getJson<NrtResponse>(withAoi('/api/nrt', aoi, `days=${liveDays}&min_confidence=${minConf}`)),
@@ -113,6 +136,23 @@ export default function ExploreTab({ aoi, setAoi }: Props) {
           {sensorList.length === 0 && <p className="mt-1 text-amber-300" role="alert">Select at least one sensor.</p>}
         </fieldset>
         <fieldset className="rounded border border-slate-700 p-3">
+          <legend className="px-1 font-medium">Impact layers</legend>
+          <label className="mb-2 flex items-center gap-2"><span className="text-slate-400">Exposure distance</span>
+            <select className="rounded border border-slate-600 bg-slate-800 px-2 py-1" value={bufferKm} onChange={(e) => setBufferKm(Number(e.target.value))}>
+              {[1, 2, 5, 10, 20].map((k) => <option key={k} value={k}>{k} km</option>)}
+            </select></label>
+          <div className="space-y-1">
+            {OVERLAYS.map((o) => (
+              <label key={o.id} className="flex items-start gap-1.5" title={o.note}>
+                <input type="checkbox" className="mt-1" checked={!!overlays[o.id]} disabled={!hasAoi && o.kind !== 'raster'}
+                       onChange={(e) => setOverlays({ ...overlays, [o.id]: e.target.checked })} />
+                <span>{o.label}<span className="block text-xs text-slate-500">{o.note}</span></span>
+              </label>
+            ))}
+          </div>
+          {!hasAoi && <p className="mt-2 text-xs text-amber-200">Select an area to load points, roads and the fire exposure zone.</p>}
+        </fieldset>
+        <fieldset className="rounded border border-slate-700 p-3">
           <legend className="px-1 font-medium">Live FIRMS feed</legend>
           <label className="flex items-center gap-1">
             <input type="checkbox" checked={showLive} onChange={(e) => setShowLive(e.target.checked)} /> Show live near-real-time hotspots
@@ -158,7 +198,10 @@ export default function ExploreTab({ aoi, setAoi }: Props) {
           </Card>
           <CurrentCard data={an.data} loading={an.isLoading} error={an.isError} />
         </div>
-        <MapView aoi={aoi} onAoi={setAoi} mode={mode} onModeDone={() => setMode('none')} circleKm={circleKm} hotspots={hs.data} liveData={showLive ? liveQ.data : undefined} />
+        <MapView aoi={aoi} onAoi={setAoi} mode={mode} onModeDone={() => setMode('none')} circleKm={circleKm} hotspots={hs.data} liveData={showLive ? liveQ.data : undefined}
+          overlays={overlays} impactGeo={hasAoi ? impactGeo : {}} fireZone={hasAoi ? impactQ.data?.fire?.zone_geojson : null} />
+        <ImpactPanel data={hasAoi ? impactQ.data : ({ status: 'aoi_required', message: 'Select an area (preset, drawn shape or point + radius) to see what nearby fire activity could affect: people, homes in the wildland–urban interface, roads, hospitals, schools, airports, protected land and farmland.' } as ImpactResponse)}
+          loading={impactQ.isFetching} error={impactQ.error as Error | null} bufferKm={bufferKm} />
         <p className="text-xs text-slate-500">
           Points are raw satellite detections (pixel centres), not fire perimeters. All times UTC. Not a forecast.
           Basemap © CARTO, © OpenStreetMap contributors. Fire data: NASA FIRMS.

@@ -68,3 +68,27 @@ NRT rows are provisional and have no `type` value (NULL), so they can't be filte
 
 ## Basemap
 CARTO Dark Matter vector style (https://basemaps.cartocdn.com), © CARTO, © OpenStreetMap contributors. Loaded by the browser only. If it can't be reached, the map shows a plain background and still works.
+
+## Human-impact layers (added 2026-11-14)
+Static layers are built by `backend/scripts/prepare_impact.py` into `data/processed/impact/`. Live layers are queried per area and cached in `data/cache/impact/`.
+
+| Layer | Source | Access | Coverage | Licence |
+|---|---|---|---|---|
+| Population, housing units | US Census 2020 blocks, via USFS / SILVIS Lab WUI 2020 (`apps.fs.usda.gov/arcx/rest/services/EDW/EDW_WUI_2020_01`) | live statistics query | Conterminous US | US Government work |
+| Wildland–urban interface | USFS / SILVIS Lab WUI 2020, `wuiclass2020` (interface and intermix) | live, same query | Conterminous US | US Government work |
+| Population centers | Natural Earth 10m populated places (`pop_max` estimates; 769 US places) | static | 50 states | Public domain |
+| Roads | Natural Earth 10m roads (major and secondary highways; 7,490 segments clipped to the US) | static | 50 states | Public domain |
+| Protected areas | USGS PAD-US 3.0 Fee Manager (`services.arcgis.com/v01gqwM5QqNysAAi/.../Fee_Manager`) | live query, generalized about 100 m, clipped locally | 50 states | Public domain (USGS) |
+| Airports | OurAirports (large, medium, small; 16,144) | static | 50 states | Public domain |
+| Hospitals | HIFLD Hospitals (ORNL/DHS), copy hosted by PASDA (Penn State); STATUS = OPEN (7,966) | static | 50 states | Public domain |
+| Schools | NCES EDGE public school locations 2022–23 (102,268) | static | 50 states | Public domain |
+| Fire stations | USGS National Structures Dataset, Fire Stations/EMS Stations (52,010), carto.nationalmap.gov structures MapServer layer 51 | static | 50 states + territories | Public domain |
+| Agriculture | NLCD 2021 land cover (MRLC WCS), classes 81 pasture/hay and 82 cultivated crops | live raster, downsampled to ≤1,500 px | Conterminous US | Public domain |
+
+Map tiles: PAD-US (USGS cached tiles to zoom 7), WUI 2020 (USFS map export, slow), NLCD 2021 (MRLC WMS).
+
+### Notes
+- The national HIFLD Open portal was retired in 2025. The hospitals layer comes from the PASDA copy, which credits ORNL and DHS.
+- The USFS WUI service returns sums over census blocks that intersect the area, so edge blocks are counted whole.
+- Natural Earth populated places is a coarse list of larger places, not every town. Population figures come from the Census blocks.
+- Checked and not used: Overpass (OpenStreetMap) API was at capacity; the USDA CropScape statistics service did not respond within 150 s; a Colorado-only WUI copy; NASA-hosted HIFLD and NLCD copies returned 404.

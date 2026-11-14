@@ -223,3 +223,27 @@ export interface BriefResponse {
   data_as_of: { final: Record<string, string>; nrt: Record<string, string> }
   caveat: string
 }
+
+export interface ImpactLayer {
+  status: 'ok' | 'unavailable' | 'too_large' | 'outside_coverage' | 'skipped'
+  message?: string
+  source?: string
+  note?: string
+  [k: string]: unknown
+}
+
+export interface ImpactItem {
+  name: string
+  distance_to_fire_km: number | null
+  [k: string]: unknown
+}
+
+export interface ImpactResponse {
+  status: 'ok' | 'aoi_required'
+  message?: string
+  area_km2: number
+  fire: { detections: number; buffer_km: number; zone_km2: number; zone_geojson: unknown | null }
+  layers: Record<'places' | 'roads' | 'hospitals' | 'schools' | 'firestations' | 'airports' | 'population' | 'wui' | 'protected' | 'agriculture', ImpactLayer>
+  filters: { start: string; end: string }
+  note: string
+}

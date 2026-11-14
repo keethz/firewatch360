@@ -6,6 +6,7 @@ import 'maplibre-gl/dist/maplibre-gl.css'
 import workerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?url'
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { aoiRing, circleRing, type Aoi } from '../lib/aoi'
+import { OVERLAYS, RASTER_TILES, type OverlayId, type RasterOverlay, type VectorOverlay } from '../lib/overlays'
 import type { HotspotsResponse, NrtResponse } from '../types/api'
 
 maplibregl.setWorkerUrl(workerUrl)
@@ -39,9 +40,12 @@ interface Props {
   circleKm: number
   hotspots: HotspotsResponse | undefined
   liveData?: NrtResponse
+  overlays?: Partial<Record<OverlayId, boolean>>
+  impactGeo?: Partial<Record<VectorOverlay, unknown>>
+  fireZone?: unknown | null
 }
 
-export default function MapView({ aoi, onAoi, mode, onModeDone, circleKm, hotspots, liveData }: Props) {
+export default function MapView({ aoi, onAoi, mode, onModeDone, circleKm, hotspots, liveData, overlays = {}, impactGeo = {}, fireZone = null }: Props) {
   const el = useRef<HTMLDivElement>(null)
   const mapRef = useRef<maplibregl.Map | null>(null)
   const [ready, setReady] = useState(false)
@@ -85,6 +89,17 @@ export default function MapView({ aoi, onAoi, mode, onModeDone, circleKm, hotspo
       map.addSource('draft', { type: 'geojson', data: EMPTY })
       map.addSource('hotspots', { type: 'geojson', data: EMPTY })
       map.addSource('live', { type: 'geojson', data: EMPTY })
+      // Impact rasters sit under everything else we draw.
+      for (const [id, r] of Object.entries(RASTER_TILES) as [RasterOverlay, (typeof RASTER_TILES)[RasterOverlay]][]) {
+        map.addSource(`ov-${id}`, { type: 'raster', tiles: r.tiles, tileSize: 256, maxzoom: r.maxzoom, attribution: r.attribution })
+        map.addLayer({ id: `ov-${id}`, type: 'raster', source: `ov-${id}`, layout: { visibility: 'none' }, paint: { 'raster-opacity': r.opacity } })
+      }
+      map.addSource('ov-firezone', { type: 'geojson', data: EMPTY })
+      map.addLayer({ id: 'ov-firezone-fill', type: 'fill', source: 'ov-firezone', layout: { visibility: 'none' }, paint: { 'fill-color': '#f43f5e', 'fill-opacity': 0.12 } })
+      map.addLayer({ id: 'ov-firezone', type: 'line', source: 'ov-firezone', layout: { visibility: 'none' }, paint: { 'line-color': '#f43f5e', 'line-width': 1.5, 'line-dasharray': [3, 2] } })
+      map.addSource('ov-roads', { type: 'geojson', data: EMPTY })
+      map.addLayer({ id: 'ov-roads', type: 'line', source: 'ov-roads', layout: { visibility: 'none' },
+        paint: { 'line-color': '#facc15', 'line-opacity': 0.8, 'line-width': ['match', ['get', 'type'], 'Major Highway', 2.5, 1.5] } })
       map.addLayer({ id: 'aoi-fill', type: 'fill', source: 'aoi', paint: { 'fill-color': '#f97316', 'fill-opacity': 0.08 } })
       map.addLayer({ id: 'aoi-line', type: 'line', source: 'aoi', paint: { 'line-color': '#f97316', 'line-width': 2 } })
       map.addLayer({
@@ -107,6 +122,22 @@ export default function MapView({ aoi, onAoi, mode, onModeDone, circleKm, hotspo
           'circle-stroke-color': ['match', ['get', 'sensor'], 'MODIS', SENSOR_COLOR.MODIS, SENSOR_COLOR.VIIRS],
         },
       })
+      // Impact points: coloured circle + letter, so the type never depends on colour alone.
+      for (const o of OVERLAYS.filter((x) => x.kind === 'vector' && x.glyph)) {
+        map.addSource(`ov-${o.id}`, { type: 'geojson', data: EMPTY })
+        map.addLayer({ id: `ov-${o.id}`, type: 'circle', source: `ov-${o.id}`, layout: { visibility: 'none' },
+          paint: { 'circle-color': o.color, 'circle-radius': ['interpolate', ['linear'], ['zoom'], 4, 4, 10, 8], 'circle-stroke-color': '#0b0f14', 'circle-stroke-width': 1 } })
+        map.addLayer({ id: `ov-${o.id}-label`, type: 'symbol', source: `ov-${o.id}`, layout: { visibility: 'none', 'text-field': o.glyph!,
+          'text-size': ['interpolate', ['linear'], ['zoom'], 4, 7, 10, 11], 'text-allow-overlap': true, 'text-font': ['Open Sans Bold', 'Noto Sans Bold'] },
+          paint: { 'text-color': '#0b0f14' } })
+        map.on('click', `ov-${o.id}`, (e: maplibregl.MapLayerMouseEvent) => {
+          const p = e.features?.[0]?.properties as Record<string, unknown> | undefined
+          if (!p || live.current.mode !== 'none') return
+          const extra = ['city', 'state', 'type', 'beds', 'size', 'iata', 'pop_max'].filter((k) => p[k] != null && p[k] !== '' && p[k] !== 'null')
+            .map((k) => `${k === 'pop_max' ? 'population (est.)' : k}: ${typeof p[k] === 'number' ? (p[k] as number).toLocaleString() : p[k]}`).join('<br/>')
+          new maplibregl.Popup().setLngLat(e.lngLat).setHTML(`<div style="color:#0f172a;font:12px system-ui"><b>${o.label.replace(/s$/, '')}</b>: ${String(p.name ?? '')}<br/>${extra}</div>`).addTo(map)
+        })
+      }
       map.addLayer({ id: 'draft-line', type: 'line', source: 'draft', paint: { 'line-color': '#fde68a', 'line-width': 2, 'line-dasharray': [2, 2] } })
       map.addLayer({ id: 'draft-pt', type: 'circle', source: 'draft', filter: ['==', ['geometry-type'], 'Point'], paint: { 'circle-color': '#fde68a', 'circle-radius': 4 } })
       map.addLayer({ id: 'draft-fill', type: 'fill', source: 'draft', filter: ['==', ['geometry-type'], 'Polygon'], paint: { 'fill-color': '#fde68a', 'fill-opacity': 0.1 } })
@@ -208,6 +239,28 @@ export default function MapView({ aoi, onAoi, mode, onModeDone, circleKm, hotspo
     }
   }, [aoi, ready])
 
+  // Impact overlays: visibility and data
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map || !ready) return
+    const vis = (id: string, on: boolean) => map.getLayer(id) && map.setLayoutProperty(id, 'visibility', on ? 'visible' : 'none')
+    for (const o of OVERLAYS) {
+      const on = !!overlays[o.id]
+      if (o.id === 'firezone') { vis('ov-firezone', on); vis('ov-firezone-fill', on) }
+      else { vis(`ov-${o.id}`, on); vis(`ov-${o.id}-label`, on) }
+    }
+  }, [overlays, ready])
+
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map || !ready) return
+    for (const id of ['places', 'roads', 'hospitals', 'schools', 'firestations', 'airports'] as VectorOverlay[]) {
+      ;(map.getSource(`ov-${id}`) as GeoJSONSource | undefined)?.setData((impactGeo[id] as FC) ?? EMPTY)
+    }
+    const zone = fireZone ? ({ type: 'FeatureCollection', features: [{ type: 'Feature', properties: {}, geometry: fireZone }] } as unknown as FC) : EMPTY
+    ;(map.getSource('ov-firezone') as GeoJSONSource | undefined)?.setData(zone)
+  }, [impactGeo, fireZone, ready])
+
   useEffect(() => {
     const map = mapRef.current
     if (!map || !ready) return
@@ -239,6 +292,20 @@ export default function MapView({ aoi, onAoi, mode, onModeDone, circleKm, hotspo
         <div className="mt-0.5 flex items-center gap-1.5">
           <span className="inline-block h-2 w-2 rounded-full border border-white" /> near-real-time (provisional)
         </div>
+        {OVERLAYS.filter((o) => overlays[o.id]).map((o) => (
+          <div key={o.id} className="mt-0.5 flex items-center gap-1.5">
+            {o.glyph ? (
+              <span className="inline-flex h-3 w-3 items-center justify-center rounded-full text-[8px] font-bold text-slate-900" style={{ background: o.color }}>{o.glyph}</span>
+            ) : o.kind === 'zone' ? (
+              <span className="inline-block h-2.5 w-3 border border-dashed" style={{ borderColor: o.color, background: `${o.color}33` }} />
+            ) : o.id === 'roads' ? (
+              <span className="inline-block h-0.5 w-3" style={{ background: o.color }} />
+            ) : (
+              <span className="inline-block h-2.5 w-3 opacity-70" style={{ background: o.color }} />
+            )}
+            {o.label}
+          </div>
+        ))}
         {liveData && (
           <div className="mt-0.5 flex items-center gap-1.5">
             <span className="inline-block h-2.5 w-2.5 rounded-full border-2 border-sky-300" /> live NRT ring (last days)

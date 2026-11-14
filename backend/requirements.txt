@@ -4,6 +4,9 @@ httpx==0.28.1
 pandas==3.1.1
 pyarrow==26.0.1
 pydantic-settings==2.16.3
+pyproj==3.7.2
+pyshp==2.3.1
 pytest==9.2.0
 shapely==2.2.0
+tifffile==2025.10.16
 uvicorn==0.54.0

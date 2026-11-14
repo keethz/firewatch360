@@ -411,3 +411,88 @@ def brief(request: Request, aoi: AOI = Depends(aoi_param), p: HarmonizationParam
                 __import__("datetime").timezone.utc).strftime("%Y-%m-%d %H:%M UTC"),
             "data_as_of": {"final": win["data_as_of"], "nrt": win["nrt_as_of"]},
             "caveat": "Describes observed satellite fire detections. Not a forecast of fire danger or spread."}
+
+
+# ---------------------------------------------------------------- Human impact
+
+import numpy as np  # noqa: E402
+import pandas as pd  # noqa: E402
+
+from app.services import impact as imp  # noqa: E402
+
+MAX_IMPACT_FIRE_POINTS = 200_000
+
+
+def _fire_points(store, aoi: AOI, start: date, end: date, sens: list[str], min_confidence: str, veg: bool):
+    where, params = aoi.sql()
+    conf = CONFIDENCE_LEVELS[min_confidence]
+    filt = (f"{where} AND acq_date BETWEEN ? AND ? AND sensor IN ({','.join('?' * len(sens))})"
+            f" AND confidence_norm IN ({','.join('?' * len(conf))})")
+    params = [*params, start, end, *sens, *conf]
+    if veg:
+        filt += " AND (type = 0 OR processing_level = 'nrt')"
+    rows = store.query(f"SELECT longitude AS x, latitude AS y FROM hotspots WHERE {filt} LIMIT ?",
+                       [*params, MAX_IMPACT_FIRE_POINTS + 1], aoi=aoi)
+    return np.array([r["x"] for r in rows], float), np.array([r["y"] for r in rows], float)
+
+
+@router.get("/impact")
+def impact(
+    request: Request,
+    aoi: AOI = Depends(aoi_param),
+    start: date = Query(..., description="first UTC date of fire detections, YYYY-MM-DD"),
+    end: date = Query(..., description="last UTC date, YYYY-MM-DD"),
+    buffer_km: float = Query(5.0, gt=0, le=50),
+    sensors: str = Query("MODIS,VIIRS"),
+    min_confidence: str = "nominal",
+    vegetation_only: bool = True,
+) -> dict:
+    """What could the fire activity in this area affect? Assets inside the area and within
+    `buffer_km` of its fire detections. See app/services/impact.py for sources and rules."""
+    store = _store(request)
+    if start > end:
+        raise HTTPException(422, "start must be <= end")
+    sens = [s.strip().upper() for s in sensors.split(",") if s.strip()]
+    if not sens or any(s not in ("MODIS", "VIIRS") for s in sens):
+        raise HTTPException(422, "sensors must be a comma-separated subset of MODIS,VIIRS")
+    if min_confidence not in CONFIDENCE_LEVELS:
+        raise HTTPException(422, f"min_confidence must be one of {sorted(CONFIDENCE_LEVELS)}")
+    if aoi.kind == "region":
+        return {"status": "aoi_required", "message": "Select an area (preset, drawn shape or point + radius) to see what fire activity could affect."}
+    fx, fy = _fire_points(store, aoi, start, end, sens, min_confidence, vegetation_only)
+    if len(fx) > MAX_IMPACT_FIRE_POINTS:
+        raise HTTPException(413, f"More than {MAX_IMPACT_FIRE_POINTS:,} detections; narrow the area or dates.")
+    out = imp.summarize(request.app.state.impact_static, request.app.state.impact_live, aoi, fx, fy, buffer_km)
+    out["filters"] = {"start": start.isoformat(), "end": end.isoformat(), "sensors": sens,
+                      "min_confidence": min_confidence, "vegetation_only": vegetation_only}
+    out["note"] = ("Exposure means located inside the area or within the buffer distance of a satellite fire "
+                   "detection. It is not a damage assessment or a forecast.")
+    return out
+
+
+@router.get("/impact/features")
+def impact_features(request: Request, layer: str, aoi: AOI = Depends(aoi_param), limit: int = Query(5000, ge=1, le=20000)) -> dict:
+    """GeoJSON of a static impact layer inside the area (points, or road lines)."""
+    st = request.app.state.impact_static
+    if not st.available:
+        raise HTTPException(503, "Impact layers not built. Run backend/scripts/prepare_impact.py.")
+    if aoi.kind == "region":
+        raise HTTPException(422, "Select an area first")
+    if layer not in (*imp.POINT_LAYERS, "roads"):
+        raise HTTPException(422, f"layer must be one of {[*imp.POINT_LAYERS, 'roads']}")
+    geo = imp.make_geo(aoi)
+    if layer == "roads":
+        sub = st.roads_in(geo)
+        feats = [{"type": "Feature", "geometry": imp.mapping(g), "properties": {"layer": "roads", "type": t, "name": n}}
+                 for g, t, n in zip(sub["geom"], sub["type"], sub["name"])][:limit]
+        return {"type": "FeatureCollection", "features": feats, "total": len(sub)}
+    sub = st.points_in(layer, geo)
+    total = len(sub)
+    if total > limit:
+        sub = sub.nlargest(limit, "pop_max") if layer == "places" else sub.sample(limit, random_state=0)
+    keep = [c for c in sub.columns if c not in ("latitude", "longitude", "source_date_ms")]
+    feats = [{"type": "Feature",
+              "geometry": {"type": "Point", "coordinates": [round(r.longitude, 5), round(r.latitude, 5)]},
+              "properties": {"layer": layer, **{c: imp._py(getattr(r, c)) for c in keep}}}
+             for r in sub.itertuples(index=False)]
+    return {"type": "FeatureCollection", "features": feats, "total": total, "sampled": total > len(feats)}

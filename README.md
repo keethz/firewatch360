@@ -26,6 +26,10 @@ FIREWATCH 360 merges NASA FIRMS active-fire detections from **MODIS** (2000 onwa
   - Pick any year to see it against the baseline median and its P25–P75 band.
   - Rankings, peak fire season, trend.
 - **Fire Risk Brief**: a plain-language summary card for any area: headline, % vs historical median, historical rank, anomaly level (Severe / Moderate / Normal / Below normal), MODIS–VIIRS agreement, confidence with reasons, peak season, long-term trend. Works for the latest data or any past month, with one-click PDF or PNG download.
+- **What could this affect?**:
+  - for any area, what lies inside it and within a chosen distance of its fire detections: 2020 Census population and housing, homes in the wildland–urban interface, population centers, major roads, hospitals (with beds), schools, fire stations, airports, protected land and farmland
+  - nearest named facilities
+  - map overlays for each layer
 - **Current month**: month-to-date compared with the same days of that month in every baseline year. Labelled provisional.
 - **Method & data**: calibration charts and statistics, parameters, data as-of dates, limitations, attribution.
 - **Downloads**: harmonized calendar CSV (with the calibration in its header) and a raw hotspot CSV for the selected area and dates.
@@ -76,6 +80,7 @@ python3.12 -m venv backend/.venv
 backend/.venv/bin/pip install -r backend/requirements.txt
 backend/.venv/bin/python backend/scripts/fetch_2026.py     # optional: data after the archive, needs FIRMS_MAP_KEY
 backend/.venv/bin/python backend/scripts/prepare_data.py   # CSV → Parquet in data/processed/
+backend/.venv/bin/python backend/scripts/prepare_impact.py # human-impact layers (downloads ~60 MB, ~20 s)
 ```
 
 **2. Run.**
@@ -88,7 +93,7 @@ cd frontend && npm install && npm run dev                   # app on http://loca
 **3. Test.**
 
 ```bash
-cd backend && .venv/bin/pytest -q      # 60 tests; data-dependent tests skip if data is not built
+cd backend && .venv/bin/pytest -q      # 71 tests; data-dependent tests skip if data is not built
 cd frontend && npm run build && npm run lint
 ```
 
@@ -110,6 +115,8 @@ Common options: `grid_deg` (0.01), `min_confidence` (`low|nominal|high`, default
 | `GET /api/climatology` | Per-month baseline stats and the selected year |
 | `GET /api/anomalies` | Anomalous months, rankings, trend, latest and current month |
 | `GET /api/brief` | Fire Risk Brief for the area (`end=YYYY-MM` for a past month) |
+| `GET /api/impact` | Population, WUI, roads, hospitals, schools, airports, protected land and farmland in the area and near its fire detections (`start`, `end`, `buffer_km`) |
+| `GET /api/impact/features` | GeoJSON of an impact layer for the map (`layer=places|roads|hospitals|schools|firestations|airports`) |
 | `GET /api/current` | Current month-to-date vs the same days in baseline years |
 | `GET /api/hotspots` | GeoJSON points for the map (capped; exact `total`) |
 | `GET /api/nrt` | Live FIRMS NRT hotspots, last 1–10 days (server-side key, cached) |
@@ -128,6 +135,7 @@ backend/
   app/services/analytics.py  climatology, anomalies, rankings, trend, month-to-date
   app/services/nrt.py        live FIRMS NRT proxy with disk cache
   app/services/brief.py      Fire Risk Brief rules
+  app/services/impact.py     human-impact layers and fire exposure
   scripts/                   data download, Parquet build, NRT mask validation
   tests/                     pytest suite
 frontend/src/
@@ -158,4 +166,4 @@ Phase 6 (deployment and demo) is not started. See [docs/IMPLEMENTATION_STATUS.md
 
 ## Data and attribution
 
-Fire data: NASA Fire Information for Resource Management System (FIRMS), <https://firms.modaps.eosdis.nasa.gov/>. MODIS Collection 6.1 and VIIRS S-NPP 375 m active fire products. Country boundary: Natural Earth (public domain). Basemap © CARTO, © OpenStreetMap contributors.
+Fire data: NASA Fire Information for Resource Management System (FIRMS), <https://firms.modaps.eosdis.nasa.gov/>. MODIS Collection 6.1 and VIIRS S-NPP 375 m active fire products. Country boundary, places and roads: Natural Earth (public domain). Population and WUI: US Census 2020 via USFS / SILVIS Lab WUI 2020. Protected areas: USGS PAD-US. Hospitals: HIFLD (ORNL/DHS). Schools: NCES EDGE. Fire stations: USGS National Structures Dataset. Airports: OurAirports. Land cover: NLCD 2021 (MRLC). Basemap © CARTO, © OpenStreetMap contributors.

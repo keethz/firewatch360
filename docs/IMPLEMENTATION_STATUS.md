@@ -109,4 +109,24 @@ _Last updated: 2026-11-14_
 - [x] Tests: 60 passed (9 brief tests: rules, ranks, agreement, confidence, Mann–Kendall, end-to-end synthetic and real data)
 - [x] Checked in the browser: California Sep 2020 brief, PNG and PDF generation, phone width
 
+## Feature: Human-impact overlays (done)
+- [x] Scope change: the build plan listed community-asset analysis as out of scope; added at the user's request.
+- [x] Sources for all eight layers (see DATA_SOURCES): Census 2020 population and SILVIS WUI 2020 (USFS), Natural Earth places and roads, USGS PAD-US, OurAirports, HIFLD hospitals (PASDA), NCES schools, NLCD 2021 agriculture (MRLC)
+- [x] Fire stations added as a ninth layer (USGS National Structures, 52,010 fire/EMS stations): count in area and near fire, nearest stations, map overlay (F markers).
+- [x] `backend/scripts/prepare_impact.py` builds the static layers (about 20 s)
+- [x] `GET /api/impact`:
+  - each layer inside the area and within the exposure distance of fire detections
+  - nearest named facilities
+  - per-layer status and sources
+  - live results cached on disk
+- [x] `GET /api/impact/features`: GeoJSON for the map
+- [x] Explore:
+  - "Impact layers" panel: exposure distance and 9 overlay toggles
+  - map overlays: lettered point markers, roads, fire exposure zone, PAD-US / WUI / NLCD tiles
+  - "What could this affect?" summary with headline sentence and 9 tiles
+- [x] Tests: 71 passed (11 impact tests; external services mocked)
+- [x] Checked in the browser: Thomas Fire scenario, overlays, legend, phone width
+
+Known limits: WUI and land cover cover the lower 48 only; WUI tiles are slow (about 8 s per tile from USFS); PAD-US tiles stop at zoom 7; the first WUI query for a very large area can take up to about 75 s (then cached).
+
 ## Next: Phase 6 (deploy, README, demo recording)

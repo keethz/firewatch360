@@ -129,3 +129,24 @@ Checks against known events (default parameters):
 | California bbox, Aug 2021 | Severe (+574%) | Highest August since 2001 | agree | High |
 | 60 km around Santa Barbara/Ventura, Dec 2017 (Thomas fire) | Severe | Highest December since 2000 | agree | Medium (small baseline) |
 | US, Nov 2026 days 1–13 | Normal (41% below) | 2nd-lowest since 2000 | MODIS only (VIIRS NRT ended) | Low |
+
+## Human impact: "What could this affect?"
+Code: `backend/app/services/impact.py`. Endpoints: `GET /api/impact`, `GET /api/impact/features`.
+
+- **Inputs**: the area of interest, the fire detections in it for the selected UTC dates (same sensor, confidence and vegetation filters as the map), and an exposure distance (default 5 km).
+- **Fire exposure zone**: detections are snapped to 1 km cells (moves each by ≤0.7 km), buffered by the distance and unioned, then clipped to the area. Distances and areas use an azimuthal equidistant projection centred on the area.
+- **Point layers** (population centers, hospitals, schools, airports): counted inside the area and within the distance of the nearest detection. The nearest items are listed with their distance.
+- **Roads**: length inside the area and inside the exposure zone.
+- **Population and WUI**: sums of 2020 Census population and housing units over blocks intersecting the area, and over blocks intersecting the zone. WUI is the SILVIS 2020 interface and intermix classes.
+- **Protected areas**: PAD-US polygons clipped to the area. Overlapping designations are unioned for totals; per-unit areas are listed.
+- **Agriculture**: NLCD 2021 pixels (cultivated crops 82, pasture/hay 81) inside the area and zone, from a raster downsampled to ≤1,500 px per side (equal-area EPSG:5070).
+- Every layer reports a status: `ok`, `unavailable` (with the service error), `too_large`, or `outside_coverage`. No fallback numbers are invented.
+
+**Limits.** "Exposure" means proximity to satellite detections. It is not fire perimeter, damage, evacuation zone or risk. Detections mark hot pixels at overpass times. A 5 km distance is a display choice, not a hazard threshold.
+
+Checks against known events (default 5 km):
+
+| Event | Detections | Residents near fire | Schools | Hospitals (beds) | Protected land near fire |
+|---|---|---|---|---|---|
+| Thomas Fire, 60 km around 34.4, −119.2, 2017-12-04..31 | 10,810 | 506,230 | 120 | 11 (1,510) | 1,322 km² (Los Padres NF 1,175 km²) |
+| Camp Fire, 40 km around 39.76, −121.6, 2018-11-08..25 | 5,398 | 70,137 | 35 | 0 (nearest 6.1 km) | 378 km² (Plumas NF 212 km²) |
