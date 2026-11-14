@@ -378,3 +378,36 @@ def nrt(
         "sources": {s: f"FIRMS {'VIIRS_SNPP_NRT' if s == 'VIIRS' else 'MODIS_NRT'}" for s in sens},
         "note": "Live near-real-time detections, provisional. Not filtered by fire type (may include static sources).",
     }
+
+
+# ---------------------------------------------------------------- Fire Risk Brief
+
+from app.services.brief import build_brief  # noqa: E402
+from app.services.harmonize import harmonize as _harmonize  # noqa: E402
+
+
+@router.get("/brief")
+def brief(request: Request, aoi: AOI = Depends(aoi_param), p: HarmonizationParams = Depends(params_param),
+          w: dict = Depends(window_param)) -> dict:
+    """Plain-language Fire Risk Brief for the area. See app/services/brief.py for the rules."""
+    a = _analysis(request, aoi, p, w)
+    h = request.app.state.harmonizer
+    win = a["meta"]["windows"]
+    cal = h.calibration(aoi, p)["calibration"]
+    tc = h.terra_correction(aoi, p)
+    rows = a["rows"]
+    # The current month-to-date is used only when the requested window reaches the present.
+    live = win["current"] is not None and (w["end"] is None or w["end"] >= win["current"]["month"])
+    cur = h.current_month(aoi, p, a["climatology"]["baseline_years"]) if live else None
+    out = build_brief(
+        series=rows, windows=win, calibration=cal, terra=tc, clim=a["climatology"],
+        rankings=an.rankings(rows, a["climatology"]), current=cur,
+        current_counts=h.current_counts(aoi, p) if live else None,
+        k=cal["k"], c=tc["c"], z_threshold=w["z"],
+        harmonize_fn=lambda hist, months: _harmonize(hist, cal["k"], months, win["switch_month"], tc["c"], win["aqua_month"]),
+    )
+    aoi_desc = {k: v for k, v in a["meta"]["aoi"].items() if k != "geometry"}
+    return {**out, "aoi": aoi_desc, "generated_utc": __import__("datetime").datetime.now(
+                __import__("datetime").timezone.utc).strftime("%Y-%m-%d %H:%M UTC"),
+            "data_as_of": {"final": win["data_as_of"], "nrt": win["nrt_as_of"]},
+            "caveat": "Describes observed satellite fire detections. Not a forecast of fire danger or spread."}

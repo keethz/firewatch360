@@ -5,6 +5,7 @@ import { getJson } from '../lib/api'
 import type { SeqRamp } from '../lib/color'
 import type { CalendarResponse, ClimatologyResponse } from '../types/api'
 import CalendarHeatmap, { type CalView } from './CalendarHeatmap'
+import FireRiskBrief from './FireRiskBrief'
 import SummaryPanel from './SummaryPanel'
 import YearChart from './YearChart'
 
@@ -44,6 +45,7 @@ export default function CalendarTab({ aoi }: { aoi: Aoi }) {
 
   return (
     <div className="space-y-6">
+      <FireRiskBrief aoi={aoi} extra={bq} />
       <section aria-labelledby="cal-h" className="rounded-lg border border-slate-700 bg-slate-900/60 p-4">
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div>

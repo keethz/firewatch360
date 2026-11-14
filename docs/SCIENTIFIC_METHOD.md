@@ -89,3 +89,43 @@ All statistics use the harmonized monthly series (VIIRS-equivalent fire cell-day
   The mask slightly under-counts VIIRS (some cells near industrial sites also burn). No bias correction is applied. Rerun with `backend/scripts/validate_mask.py`.
 - **Current month.** Month-to-date value vs the harmonized value for the same days (1..D) of that month in each baseline year. Median, P25/P75, robust z and rank are reported, labelled provisional. The sensor is whichever NRT feed reaches furthest (VIIRS on a tie); MODIS is scaled by k. The last NRT day is dropped as possibly incomplete (for example 2026-11-14 had 5 MODIS overpasses vs about 20 on full days).
 - **Live map layer.** `/api/nrt` shows raw FIRMS NRT detections for the last 1–10 days, not type-filtered. Not used in any statistic.
+
+## Fire Risk Brief
+Code: `backend/app/services/brief.py`. Endpoint: `GET /api/brief` (AOI and the analytics parameters; `end=YYYY-MM` for a past month). It describes observed detections only and does not forecast fire danger.
+
+- **Reference period**: the current month-to-date if it covers at least 7 days (and the requested window reaches the present). Otherwise the latest complete month in the window, which may be provisional.
+- **Current activity**: % difference between the harmonized value and the baseline median for the same calendar period (same days 1..D for month-to-date).
+- **Historical rank**: among every year the record covers for that period, including years with zero detections. "Nth-highest" or "Nth-lowest", whichever is nearer.
+- **Anomaly level** (robust z):
+
+  | Level | z |
+  |---|---|
+  | Severe | ≥ 3 |
+  | Moderate | ≥ 2 |
+  | Below normal | ≤ −2 |
+  | Normal | otherwise |
+
+  The headline sentence follows the level.
+- **Sensor agreement**: MODIS and VIIRS raw cell-days are each compared with their own history for the period (MODIS from 2002-08 with Terra + Aqua; VIIRS from 2012-02) and classified high, normal or low. Labels:
+  - `MODIS and VIIRS agree`
+  - `VIIRS-only signal` / `MODIS-only signal`
+  - `MODIS and VIIRS disagree`
+  - single-sensor, when the other has no data for the period
+- **Confidence**: starts High; one level lower for each of the following:
+  - provisional data
+  - only one sensor available
+  - sensors disagree
+  - baseline median < 20 cell-days (two levels if < 5)
+  - fewer than 10 baseline years
+  - month-to-date covering fewer than 10 days
+  - US-wide fallback calibration
+- **Long-term activity**: Mann–Kendall test on annual totals of complete years with a Theil–Sen slope. "Increasing" or "Decreasing" only when p < 0.05.
+
+Checks against known events (default parameters):
+
+| AOI, period | Level | Rank | Agreement | Confidence |
+|---|---|---|---|---|
+| California bbox, Sep 2020 | Severe (+1,533%) | Highest September since 2001 | agree (MODIS z 27, VIIRS z 45) | High |
+| California bbox, Aug 2021 | Severe (+574%) | Highest August since 2001 | agree | High |
+| 60 km around Santa Barbara/Ventura, Dec 2017 (Thomas fire) | Severe | Highest December since 2000 | agree | Medium (small baseline) |
+| US, Nov 2026 days 1–13 | Normal (41% below) | 2nd-lowest since 2000 | MODIS only (VIIRS NRT ended) | Low |

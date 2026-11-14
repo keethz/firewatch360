@@ -25,6 +25,7 @@ FIREWATCH 360 merges NASA FIRMS active-fire detections from **MODIS** (2000 onwa
   - Tooltips show the harmonized value, raw MODIS and VIIRS, the median, % difference and z-score.
   - Pick any year to see it against the baseline median and its P25–P75 band.
   - Rankings, peak fire season, trend.
+- **Fire Risk Brief**: a plain-language summary card for any area: headline, % vs historical median, historical rank, anomaly level (Severe / Moderate / Normal / Below normal), MODIS–VIIRS agreement, confidence with reasons, peak season, long-term trend. Works for the latest data or any past month, with one-click PDF or PNG download.
 - **Current month**: month-to-date compared with the same days of that month in every baseline year. Labelled provisional.
 - **Method & data**: calibration charts and statistics, parameters, data as-of dates, limitations, attribution.
 - **Downloads**: harmonized calendar CSV (with the calibration in its header) and a raw hotspot CSV for the selected area and dates.
@@ -87,7 +88,7 @@ cd frontend && npm install && npm run dev                   # app on http://loca
 **3. Test.**
 
 ```bash
-cd backend && .venv/bin/pytest -q      # 51 tests; data-dependent tests skip if data is not built
+cd backend && .venv/bin/pytest -q      # 60 tests; data-dependent tests skip if data is not built
 cd frontend && npm run build && npm run lint
 ```
 
@@ -108,6 +109,7 @@ Common options: `grid_deg` (0.01), `min_confidence` (`low|nominal|high`, default
 | `GET /api/calendar` | Year × month matrix with medians, z-scores and anomaly flags |
 | `GET /api/climatology` | Per-month baseline stats and the selected year |
 | `GET /api/anomalies` | Anomalous months, rankings, trend, latest and current month |
+| `GET /api/brief` | Fire Risk Brief for the area (`end=YYYY-MM` for a past month) |
 | `GET /api/current` | Current month-to-date vs the same days in baseline years |
 | `GET /api/hotspots` | GeoJSON points for the map (capped; exact `total`) |
 | `GET /api/nrt` | Live FIRMS NRT hotspots, last 1–10 days (server-side key, cached) |
@@ -125,6 +127,7 @@ backend/
   app/services/harmonize.py  gridding, cell-days, k and c fits, harmonized series, NRT months
   app/services/analytics.py  climatology, anomalies, rankings, trend, month-to-date
   app/services/nrt.py        live FIRMS NRT proxy with disk cache
+  app/services/brief.py      Fire Risk Brief rules
   scripts/                   data download, Parquet build, NRT mask validation
   tests/                     pytest suite
 frontend/src/

@@ -446,15 +446,15 @@ class Harmonizer:
                         "viirs": v, "harmonized": float(v), "source": "VIIRS_provisional", "provisional": True})
         return out
 
-    def current_month(self, aoi: AOI, p: HarmonizationParams, baseline_years: list[int]) -> dict | None:
-        """Month-to-date provisional NRT vs the same days of that month in baseline years.
-        If the current-month sensor is MODIS (VIIRS NRT lagging), its count is scaled by k."""
+    def current_counts(self, aoi: AOI, p: HarmonizationParams) -> tuple[dict, dict] | None:
+        """Raw cell-days per sensor for the current month-to-date window (pc) and for the same
+        calendar days in every earlier year (hist). None when there is no partial NRT month."""
         w = self.windows()
         if not w["current"]:
             return None
-        m, through, sensor = w["current"]["month"], w["current"]["through"], w["current"]["sensor"]
-        day = int(through[8:10])
-        mm = int(m[5:7])
+        m, through = w["current"]["month"], w["current"]["through"]
+        day, mm = int(through[8:10]), int(m[5:7])
+
         def build():
             pc = monthly_cell_days(self.store, aoi, p, levels=("standard", "nrt"),
                                    extra_where="acq_date BETWEEN ? AND ?",
@@ -462,7 +462,18 @@ class Harmonizer:
             hist = monthly_cell_days(self.store, aoi, p,
                                      extra_where="month(acq_date) = ? AND day(acq_date) <= ?", extra_params=(mm, day))
             return pc, hist
-        pc, hist = self._cached(("current", aoi.key, p, m, day), build)
+        return self._cached(("current", aoi.key, p, m, day), build)
+
+    def current_month(self, aoi: AOI, p: HarmonizationParams, baseline_years: list[int]) -> dict | None:
+        """Month-to-date provisional NRT vs the same days of that month in baseline years.
+        If the current-month sensor is MODIS (VIIRS NRT lagging), its count is scaled by k."""
+        counts = self.current_counts(aoi, p)
+        if counts is None:
+            return None
+        pc, hist = counts
+        w = self.windows()
+        m, through, sensor = w["current"]["month"], w["current"]["through"], w["current"]["sensor"]
+        day, mm = int(through[8:10]), int(m[5:7])
         cal = self.calibration(aoi, p)["calibration"]
         tc = self.terra_correction(aoi, p)
         months = [f"{y:04d}-{mm:02d}" for y in baseline_years]

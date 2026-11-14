@@ -97,4 +97,16 @@ _Last updated: 2026-11-14_
 - Frontend `npm run build` and `oxlint`: pass
 - Checked in the browser: live layer, current-month card, provisional calendar cells, Method page, phone width
 
+## Feature: Fire Risk Brief (done)
+- [x] `GET /api/brief`:
+  - headline, current activity vs median, historical rank, anomaly level, sensor agreement, confidence (with reasons), peak season, long-term trend (Mann–Kendall), baseline and factors
+  - the rules are returned with the brief
+- [x] Prominent card at the top of Explore and Calendar:
+  - level shown as colour plus icon plus text
+  - "Brief for" picker: latest data or any past month
+  - "How is this decided?" disclosure
+- [x] One-click **PDF** (A4 landscape, about 230 KB) and **PNG** download of the brief, made in the browser (`html-to-image`, `jspdf`, loaded only on click)
+- [x] Tests: 60 passed (9 brief tests: rules, ranks, agreement, confidence, Mann–Kendall, end-to-end synthetic and real data)
+- [x] Checked in the browser: California Sep 2020 brief, PNG and PDF generation, phone width
+
 ## Next: Phase 6 (deploy, README, demo recording)

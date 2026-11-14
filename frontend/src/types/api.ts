@@ -194,3 +194,32 @@ export interface NrtResponse extends Omit<HotspotsResponse, 'counts' | 'returned
   by_day: { date: string; sensor: string; n: number }[]
   window: [string, string]
 }
+
+export interface SensorSignal {
+  available: boolean
+  value: number | null
+  median: number | null
+  n_years: number
+  z: number | null
+  class: 'high' | 'normal' | 'low' | null
+}
+
+export interface BriefResponse {
+  headline: string
+  level: 'Severe' | 'Moderate' | 'Normal' | 'Below normal' | 'Unknown'
+  reference: { label: string; month: string; period: string; provisional: boolean; kind: 'month_to_date' | 'month' }
+  current_activity: { value: number; median: number | null; pct_vs_median: number | null; text: string | null; z: number | null; units: string }
+  rank: { rank: number; side: 'highest' | 'lowest'; of: number; text: string } | null
+  sensors: Record<'MODIS' | 'VIIRS', SensorSignal>
+  agreement: { label: string; status: string }
+  confidence: { level: 'High' | 'Medium' | 'Low'; score: number; reasons: string[] }
+  peak_season: string[]
+  trend: { direction: string; text: string; pct_per_year?: number }
+  baseline: { years: [number, number] | null; n_years: number }
+  factors: { k: number; c: number; k_scope: string; c_scope: string }
+  rules: Record<string, string>
+  aoi: Record<string, unknown>
+  generated_utc: string
+  data_as_of: { final: Record<string, string>; nrt: Record<string, string> }
+  caveat: string
+}

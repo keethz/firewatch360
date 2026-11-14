@@ -4,6 +4,7 @@ import { describeAoi, PRESETS, REGION, withAoi, type Aoi } from '../lib/aoi'
 import { getJson } from '../lib/api'
 import type { AnomaliesResponse, HotspotsResponse, NrtResponse } from '../types/api'
 import CurrentCard from './CurrentCard'
+import FireRiskBrief from './FireRiskBrief'
 import MapView, { type DrawMode } from './MapView'
 
 const n0 = (v: number) => Math.round(v).toLocaleString()
@@ -138,6 +139,7 @@ export default function ExploreTab({ aoi, setAoi }: Props) {
       </aside>
 
       <div className="min-w-0 space-y-3">
+        <FireRiskBrief aoi={aoi} />
         <div className="grid gap-3 sm:grid-cols-3">
           <Card title={`Hotspots ${start} → ${end}`}>
             {hs.isError ? <p className="text-red-300">{(hs.error as Error).message}</p> : hs.data ? (
