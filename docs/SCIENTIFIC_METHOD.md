@@ -113,12 +113,13 @@ Code: `backend/app/services/brief.py`. Endpoint: `GET /api/brief` (AOI and the a
   - single-sensor, when the other has no data for the period
 - **Confidence**: starts High; one level lower for each of the following:
   - provisional data
-  - only one sensor available
-  - sensors disagree
+  - sensors disagree (when both report)
   - baseline median < 20 cell-days (two levels if < 5)
   - fewer than 10 baseline years
   - month-to-date covering fewer than 10 days
   - US-wide fallback calibration
+
+  One sensor alone does not lower confidence: MODIS-only years before 2012 are normal, and the current month relies on MODIS since the VIIRS S-NPP NRT feed ended. Confidence is always Low when neither sensor has usable data for the period.
 - **Long-term activity**: Mann–Kendall test on annual totals of complete years with a Theil–Sen slope. "Increasing" or "Decreasing" only when p < 0.05.
 
 Checks against known events (default parameters):

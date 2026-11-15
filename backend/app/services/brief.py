@@ -146,9 +146,11 @@ def confidence(*, provisional: bool, agree_status: str, median: float | None, n_
     if provisional:
         score -= 1
         reasons.append("Near-real-time data (provisional)")
-    if agree_status in ("single", "unknown"):
-        score -= 1
-        reasons.append("Only one sensor available for this period")
+    # One sensor is enough for a reliable count (VIIRS S-NPP NRT ended in 2026; MODIS-only years
+    # are normal before 2012), so "single" costs nothing. No usable sensor data at all means Low.
+    no_sensor = agree_status == "unknown"
+    if no_sensor:
+        reasons.append("No sensor data available for this period")
     elif agree_status in ("viirs_only", "modis_only", "disagree"):
         score -= 1
         reasons.append("MODIS and VIIRS do not agree")
@@ -167,7 +169,7 @@ def confidence(*, provisional: bool, agree_status: str, median: float | None, n_
     if fallback:
         score -= 1
         reasons.append("Calibration uses the US-wide fallback factor")
-    level = "High" if score >= 3 else "Medium" if score == 2 else "Low"
+    level = "Low" if no_sensor else "High" if score >= 3 else "Medium" if score == 2 else "Low"
     return {"level": level, "score": score, "reasons": reasons}
 
 
@@ -278,7 +280,7 @@ def build_brief(*, series: list[dict], windows: dict, calibration: dict, terra: 
             "reference": f"Current month-to-date if it covers at least {MIN_MTD_DAYS} days, else the latest complete month",
             "anomaly_level": f"Severe z ≥ {SEVERE_Z:g}; Moderate z ≥ {z_threshold:g}; Below normal z ≤ −{z_threshold:g}; else Normal (robust z vs baseline median)",
             "agreement": "Each sensor's raw cell-days scored against its own history for the same period",
-            "confidence": "Starts High; one level lower per listed reason",
+            "confidence": "Starts High; one level lower per listed reason; one sensor alone is not a reason; Low if no sensor has data",
             "trend": "Mann–Kendall on annual totals of complete years; direction only if p < 0.05",
         },
     }

@@ -45,7 +45,14 @@ def test_confidence_scoring():
     c = confidence(provisional=True, agree_status="agree", median=500, n_baseline=20, mtd_days=13, fallback=False)
     assert c["level"] == "Medium" and len(c["reasons"]) == 1
     c = confidence(provisional=True, agree_status="single", median=3, n_baseline=6, mtd_days=8, fallback=True)
-    assert c["level"] == "Low" and c["score"] < 0 and len(c["reasons"]) == 6
+    assert c["level"] == "Low" and c["score"] < 0 and len(c["reasons"]) == 5
+    # one sensor alone does not lower confidence
+    assert confidence(provisional=False, agree_status="single", median=500, n_baseline=20, mtd_days=None, fallback=False)["level"] == "High"
+    c = confidence(provisional=True, agree_status="single", median=500, n_baseline=20, mtd_days=None, fallback=False)
+    assert c["level"] == "Medium" and c["reasons"] == ["Near-real-time data (provisional)"]
+    # no sensor data at all is always Low
+    c = confidence(provisional=False, agree_status="unknown", median=500, n_baseline=20, mtd_days=None, fallback=False)
+    assert c["level"] == "Low" and c["reasons"] == ["No sensor data available for this period"]
 
 
 def test_mann_kendall_detects_monotonic_trend_only():
