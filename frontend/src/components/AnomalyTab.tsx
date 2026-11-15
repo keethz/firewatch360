@@ -6,7 +6,7 @@ import 'maplibre-gl/dist/maplibre-gl.css'
 import workerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?url'
 import { useEffect, useRef, useState } from 'react'
 import { aoiRing, describeAoi, withAoi, type Aoi } from '../lib/aoi'
-import { getJson } from '../lib/api'
+import { getJson, todayUtc } from '../lib/api'
 import { Z_LIMIT, zScale } from '../lib/color'
 import type { AnomalyCell, AnomalyMapResponse } from '../types/api'
 import AiExplanation from './AiExplanation'
@@ -136,7 +136,7 @@ export default function AnomalyTab({ aoi }: { aoi: Aoi }) {
           <h2 id="amap-h" className="mr-auto text-lg font-semibold">Where is fire activity unusual?</h2>
           <label className="flex flex-col text-xs text-slate-400">Month
             <input type="month" className="rounded border border-slate-600 bg-slate-800 px-2 py-1 text-sm text-slate-100"
-                   value={month || d?.month || ''} min="2001-01" onChange={(e) => setMonth(e.target.value)} />
+                   value={month || d?.month || ''} min="2001-01" max={todayUtc().slice(0, 7)} onChange={(e) => setMonth(e.target.value && e.target.value > todayUtc().slice(0, 7) ? todayUtc().slice(0, 7) : e.target.value)} />
           </label>
           <label className="flex flex-col text-xs text-slate-400">Map cell
             <select className="rounded border border-slate-600 bg-slate-800 px-2 py-1 text-sm text-slate-100" value={cellDeg} onChange={(e) => setCellDeg(+e.target.value)}>

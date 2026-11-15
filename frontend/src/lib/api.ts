@@ -12,3 +12,8 @@ export async function getJson<T>(path: string): Promise<T> {
   }
   return res.json() as Promise<T>
 }
+
+/** Today's date in UTC (YYYY-MM-DD); the app's dates are UTC. */
+export const todayUtc = () => new Date().toISOString().slice(0, 10)
+/** Keep a typed or picked date from going past today. */
+export const notFuture = (v: string) => (v && v > todayUtc() ? todayUtc() : v)

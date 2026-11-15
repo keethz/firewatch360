@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { useState } from 'react'
 import { aoiQuery, type Aoi } from '../lib/aoi'
-import { getJson } from '../lib/api'
+import { getJson, todayUtc, notFuture } from '../lib/api'
 import type { AnomaliesResponse } from '../types/api'
 import CurrentCard from './CurrentCard'
 
@@ -71,11 +71,11 @@ export default function SummaryPanel({ aoi, extra = '' }: { aoi: Aoi; extra?: st
         </a>
         <label className="flex flex-col">
           <span className="text-slate-400">Hotspots from (UTC)</span>
-          <input type="date" className="rounded border border-slate-600 bg-slate-800 px-2 py-1" value={start} onChange={(e) => setStart(e.target.value)} />
+          <input type="date" className="rounded border border-slate-600 bg-slate-800 px-2 py-1" value={start} max={todayUtc()} onChange={(e) => setStart(notFuture(e.target.value))} />
         </label>
         <label className="flex flex-col">
           <span className="text-slate-400">to</span>
-          <input type="date" className="rounded border border-slate-600 bg-slate-800 px-2 py-1" value={end} onChange={(e) => setEnd(e.target.value)} />
+          <input type="date" className="rounded border border-slate-600 bg-slate-800 px-2 py-1" value={end} max={todayUtc()} onChange={(e) => setEnd(notFuture(e.target.value))} />
         </label>
         <a className="rounded border border-slate-500 px-3 py-1 hover:bg-slate-800" href={hotspotsUrl} download>
           Download hotspots CSV

@@ -1,7 +1,7 @@
 import { keepPreviousData, useQueries, useQuery } from '@tanstack/react-query'
 import { useEffect, useState, type FormEvent } from 'react'
 import { describeAoi, PRESETS, REGION, withAoi, type Aoi } from '../lib/aoi'
-import { getJson } from '../lib/api'
+import { getJson, todayUtc, notFuture } from '../lib/api'
 import type { AnomaliesResponse, HotspotsResponse, ImpactResponse, NrtResponse } from '../types/api'
 import CurrentCard from './CurrentCard'
 import ContextCard from './ContextCard'
@@ -113,9 +113,9 @@ export default function ExploreTab({ aoi, setAoi }: Props) {
         <Section title="Dates & filters" summary={`${start} → ${end}`} open>
           <div className="grid grid-cols-2 gap-2">
             <label className="flex flex-col"><span className="text-slate-400">From (UTC)</span>
-              <input type="date" className="rounded border border-slate-600 bg-slate-800 px-1 py-1" value={start} onChange={(e) => setStart(e.target.value)} /></label>
+              <input type="date" className="rounded border border-slate-600 bg-slate-800 px-1 py-1" value={start} max={todayUtc()} onChange={(e) => setStart(notFuture(e.target.value))} /></label>
             <label className="flex flex-col"><span className="text-slate-400">To (UTC)</span>
-              <input type="date" className="rounded border border-slate-600 bg-slate-800 px-1 py-1" value={end} onChange={(e) => setEnd(e.target.value)} /></label>
+              <input type="date" className="rounded border border-slate-600 bg-slate-800 px-1 py-1" value={end} max={todayUtc()} onChange={(e) => setEnd(notFuture(e.target.value))} /></label>
           </div>
           <div className="mt-2 flex gap-4">
             {(['MODIS', 'VIIRS'] as const).map((s) => (
