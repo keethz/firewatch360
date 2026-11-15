@@ -1072,3 +1072,47 @@ def smoke(request: Request, aoi: AOI = Depends(aoi_param),
         return _smoke.summarize(sc, _area(aoi), day, days)
     except (httpx.HTTPError, RuntimeError) as exc:
         raise HTTPException(502, f"Smoke data unavailable: {exc}") from exc
+
+
+# ---------------------------------------------------------------- investigation agent (server-sent events)
+
+import json as _json  # noqa: E402
+import sys as _sys  # noqa: E402
+
+from fastapi.responses import StreamingResponse  # noqa: E402
+
+from app.services import agent as _agent  # noqa: E402
+
+
+@router.get("/investigate")
+def investigate(request: Request, aoi: AOI = Depends(aoi_param), p: HarmonizationParams = Depends(params_param),
+                month: str | None = Query(None, description="YYYY-MM (default: latest data)"),
+                label: str = Query("the selected area", max_length=120),
+                mode: str = Query("auto", pattern="^(auto|rules)$")) -> StreamingResponse:
+    """Autonomous fire investigation, streamed as server-sent events: status, tool_call, evidence, note, done.
+    `done` carries the report with every finding checked against its cited evidence."""
+    _store(request)
+    if month is not None and not MONTH_RE.match(month):
+        raise HTTPException(422, "month must be YYYY-MM")
+    ex = request.app.state.explainer
+    tools = _agent.Tools(_sys.modules[__name__], request, aoi, p, month)
+    try:
+        tools.ref_month()  # fail fast (422) before streaming
+    except HTTPException:
+        raise
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    inv = _agent.Investigation(aoi_label="United States" if aoi.kind == "region" and label == "the selected area" else label,
+                               month=month)
+    key = ex.api_key if (mode == "auto" and ex.enabled) else ""
+    models = [m for m in dict.fromkeys([ex.model, ex.fallback_model]) if m]
+
+    def stream():
+        try:
+            for ev in _agent.investigate(tools, inv, key, models):
+                yield f"data: {_json.dumps(ev, default=str)}\n\n"
+        except Exception as exc:  # noqa: BLE001 - report to the client instead of cutting the stream
+            yield f"data: {_json.dumps({'type': 'error', 'text': str(exc)[:300]})}\n\n"
+
+    return StreamingResponse(stream(), media_type="text/event-stream",
+                             headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})

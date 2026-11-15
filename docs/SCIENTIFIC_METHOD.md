@@ -106,6 +106,21 @@ of mapped places, hospitals, schools, fire stations and airports inside, and roa
 NOAA HMS daily smoke polygons intersected with the area. Where densities overlap, the heaviest counts. A smoke day
 is a day with ≥ 10% of the area under any smoke; a heavy-smoke day has ≥ 10% under heavy smoke.
 
+## Investigation agent
+
+`/api/investigate` (server-sent events). The planner is Gemini function calling with nine tools that wrap the
+app's own functions (brief, anomaly map, NIFC incidents, drought and fire-weather context, impact, burned area,
+smoke, outlook); five accept a sub-area bbox. At most 12 tool calls; repeated calls with the same arguments are
+skipped. Each result becomes evidence E1, E2, ... and is returned to the model with its ID. The report is submitted
+through a `submit_report` function (assessment, confidence, findings with kind and evidence IDs, gaps, next steps).
+
+Verification after the model finishes: citations to unknown IDs are removed; every number in a finding (except
+1–12, which are usually months or lead times) must match a number in the cited evidence data or arguments within
+1.5% (or ±0.5), allowing thousands/millions rounding and fractions quoted as percentages. A finding is
+`verified` only when it cites valid evidence and all its numbers match. This checks numbers and citations, not the
+interpretation. If the model is not configured or fails, a fixed plan (activity, sensors, cells, incidents, drought,
+assets in the top cell) runs and templated findings are written from the same evidence, labelled rule-based.
+
 ## Analytics (Phase 2, done)
 Code: `backend/app/services/analytics.py`. Endpoints: `/api/calendar`, `/api/climatology`, `/api/anomalies`, `/api/export/calendar.csv`, `/api/export/hotspots.csv`.
 

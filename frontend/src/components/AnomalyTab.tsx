@@ -33,7 +33,7 @@ function cellSentence(c: AnomalyCell, month: string, years: [number, number]): s
   return `${lead}: ${n0(c.value)} fire cell-days in ${monthName(month)} versus ${vs}; ${c.rank === 1 ? 'the highest' : `rank ${c.rank}`} of ${c.of} years.${c.anomaly ? ' Further investigation may be warranted.' : ''}`
 }
 
-export default function AnomalyTab({ aoi }: { aoi: Aoi }) {
+export default function AnomalyTab({ aoi, onInvestigate }: { aoi: Aoi; onInvestigate?: (t: { aoi: Aoi; month: string; label: string }) => void }) {
   const [month, setMonth] = useState('')
   const [cellDeg, setCellDeg] = useState(0.25)
   const [z, setZ] = useState(2)
@@ -217,6 +217,16 @@ export default function AnomalyTab({ aoi }: { aoi: Aoi }) {
               <p className="text-slate-300">{cellSentence(sel, d.month, d.baseline_years)}</p>
               <ContextCard compact month={d.month} aoi={{ kind: 'bbox', bbox: sel.bbox }} />
               <AiExplanation url={explainUrl} />
+              {onInvestigate && (
+                <button className="w-full rounded bg-orange-600 px-3 py-1.5 font-medium hover:bg-orange-500"
+                        onClick={() => onInvestigate({
+                          aoi: { kind: 'bbox', bbox: sel.bbox },
+                          month: d.month,
+                          label: `the ${d.cell_deg}° cell at ${((sel.bbox[1] + sel.bbox[3]) / 2).toFixed(2)}°N, ${Math.abs((sel.bbox[0] + sel.bbox[2]) / 2).toFixed(2)}°W`,
+                        })}>
+                  🔎 Investigate this cell with the agent
+                </button>
+              )}
             </div>
           )}
         </section>

@@ -168,4 +168,11 @@ Known limits: WUI and land cover cover the lower 48 only; WUI tiles are slow (ab
 - [x] Found while testing: NLCD 2021 maps 2020 burn scars as grassland, so post-fire land cover uses the epoch before the fire.
 - [x] Tests: 107 passed (12 new: farmland filter, outlook skill and no-skill, smoke coverage, burned area clipping and yearly record, severity years, API checks)
 
+## Fire investigation agent (done)
+
+- [x] `app/services/agent.py`: Gemini function-calling loop over 9 tools wrapping the app's own analysis, numbered evidence, `submit_report`, citation and number verification, rule-based fallback; `/api/investigate` streams events.
+- [x] Investigate tab: live trace (tool, agent's reason, arguments, result, evidence ID, raw data), report with assessment, verified/unverified findings with clickable citations, gaps, next steps, evidence JSON and PDF downloads. "Investigate this cell" on the Anomaly map.
+- [x] Checked: California 2020-09 → 8 calls, 6/7 verified on first run; the unverified one exposed a parser bug (ISO dates read as negative numbers), fixed and tested. Anomaly-map cell, October 2026 → 8 calls in 20 s, 5/5 verified, named the Dome Fire from NIFC evidence.
+- [x] Tests: 115 passed (8 agent tests with a scripted fake Gemini: tool loop, fallback model, duplicate calls, verification, failure → rules).
+
 ## Next: Phase 6 (deploy, README, demo recording)

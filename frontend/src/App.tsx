@@ -4,12 +4,14 @@ import AnomalyTab from './components/AnomalyTab'
 import CalendarTab from './components/CalendarTab'
 import CompareTab from './components/CompareTab'
 import ExploreTab from './components/ExploreTab'
+import InvestigateTab, { type InvestigateTarget } from './components/InvestigateTab'
 import MethodTab from './components/MethodTab'
 import { REGION, type Aoi } from './lib/aoi'
 
 const TABS = [
   { id: 'explore', label: 'Explore' },
   { id: 'anomalies', label: 'Anomaly map' },
+  { id: 'investigate', label: 'Investigate with AI' },
   { id: 'history', label: 'Calendar' },
   { id: 'compare', label: 'Compare' },
   { id: 'alerts', label: 'Alerts' },
@@ -20,6 +22,7 @@ type Tab = (typeof TABS)[number]['id']
 export default function App() {
   const [aoi, setAoi] = useState<Aoi>(REGION)
   const [tab, setTab] = useState<Tab>('explore')
+  const [target, setTarget] = useState<InvestigateTarget | null>(null)
 
   return (
     <div className="min-h-screen px-4 pb-6 sm:px-6">
@@ -57,7 +60,8 @@ export default function App() {
       <main role="tabpanel" id="panel" aria-labelledby={`tab-${tab}`}>
         {tab === 'explore' && <ExploreTab aoi={aoi} setAoi={setAoi} />}
         {tab === 'history' && <CalendarTab aoi={aoi} />}
-        {tab === 'anomalies' && <AnomalyTab aoi={aoi} />}
+        {tab === 'anomalies' && <AnomalyTab aoi={aoi} onInvestigate={(t) => { setTarget({ ...t, nonce: Date.now() }); setTab('investigate') }} />}
+        {tab === 'investigate' && <InvestigateTab aoi={aoi} target={target} />}
         {tab === 'compare' && <CompareTab aoi={aoi} />}
         {tab === 'alerts' && <AlertsTab aoi={aoi} />}
         {tab === 'method' && <MethodTab aoi={aoi} />}
