@@ -10,3 +10,5 @@ Region: United States. Downloaded 2026-11-13.
 Columns:
 - MODIS: latitude, longitude, brightness, scan, track, acq_date, acq_time, satellite, instrument, confidence (0–100), version, bright_t31, frp, daynight, type
 - VIIRS: latitude, longitude, bright_ti4, scan, track, acq_date, acq_time, satellite, instrument, confidence (l/n/h), version, bright_ti5, frp, daynight, type
+
+`data/alerts/` holds saved areas and alerts (may contain webhook URLs and e-mail addresses; git-ignored).

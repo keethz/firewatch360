@@ -1,6 +1,8 @@
 import { useState } from 'react'
+import AlertsTab from './components/AlertsTab'
 import AnomalyTab from './components/AnomalyTab'
 import CalendarTab from './components/CalendarTab'
+import CompareTab from './components/CompareTab'
 import ExploreTab from './components/ExploreTab'
 import MethodTab from './components/MethodTab'
 import { REGION, type Aoi } from './lib/aoi'
@@ -9,6 +11,8 @@ const TABS = [
   { id: 'explore', label: 'Explore' },
   { id: 'history', label: 'Calendar' },
   { id: 'anomalies', label: 'Anomaly map' },
+  { id: 'compare', label: 'Compare' },
+  { id: 'alerts', label: 'Alerts' },
   { id: 'method', label: 'Method & data' },
 ] as const
 type Tab = (typeof TABS)[number]['id']
@@ -24,7 +28,7 @@ export default function App() {
           <h1 className="text-2xl font-semibold tracking-tight">FIREWATCH 360</h1>
           <p className="text-sm text-slate-400">Harmonized burning-activity calendar from NASA FIRMS MODIS and VIIRS hotspots</p>
         </div>
-        <nav role="tablist" aria-label="Views" className="flex gap-1">
+        <nav role="tablist" aria-label="Views" className="flex flex-wrap gap-1">
           {TABS.map((t) => (
             <button
               key={t.id}
@@ -54,6 +58,8 @@ export default function App() {
         {tab === 'explore' && <ExploreTab aoi={aoi} setAoi={setAoi} />}
         {tab === 'history' && <CalendarTab aoi={aoi} />}
         {tab === 'anomalies' && <AnomalyTab aoi={aoi} />}
+        {tab === 'compare' && <CompareTab aoi={aoi} />}
+        {tab === 'alerts' && <AlertsTab aoi={aoi} />}
         {tab === 'method' && <MethodTab aoi={aoi} />}
       </main>
 

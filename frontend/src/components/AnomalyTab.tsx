@@ -10,6 +10,7 @@ import { getJson } from '../lib/api'
 import { Z_LIMIT, zScale } from '../lib/color'
 import type { AnomalyCell, AnomalyMapResponse } from '../types/api'
 import AiExplanation from './AiExplanation'
+import ContextCard from './ContextCard'
 
 maplibregl.setWorkerUrl(workerUrl)
 
@@ -171,6 +172,7 @@ export default function AnomalyTab({ aoi }: { aoi: Aoi }) {
                 <div><dt className="text-xs text-slate-400">Rank</dt><dd className="font-semibold">{sel.rank} of {sel.of}</dd></div>
               </dl>
               <p className="text-slate-300">{cellSentence(sel, d.month, d.baseline_years)}</p>
+              <ContextCard compact month={d.month} aoi={{ kind: 'bbox', bbox: sel.bbox }} />
               <AiExplanation url={explainUrl} />
             </div>
           )}

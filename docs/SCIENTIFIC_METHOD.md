@@ -167,3 +167,16 @@ Checks against known events (default 5 km):
 - The model (Google Gemini 3.8 Flash, falling back to 3.5 Flash-Lite when busy; temperature 0.2, low thinking) receives only a JSON object of statistics the app computed (the Brief, or one anomaly cell) and a system prompt: use only these facts, no causes or named fires, units are cell-days, no forecasts or safety advice, mention data caveats, under 120 words.
 - Every answer is labelled AI-generated, and the facts sent to the model are returned by the API so they can be checked. Answers are cached on disk by a hash of the facts.
 - If the key is missing, the service fails or the model declines, the panel says so and shows the rule-based sentence instead. No numbers come from the model.
+
+## Drought and fire-weather context
+
+- **Drought.** U.S. Drought Monitor weekly maps (GeoJSON, non-overlapping D0–D4 polygons, 2000 onward), simplified to 0.005°. A month uses the last weekly map dated in it (maps are for Tuesdays, published Thursdays). Share per category = intersected area / area of interest, both in the area's local equidistant projection. DSCI = sum of cumulative shares D0+ … D4+ in percent (0–500). Cached on disk per week.
+- **Fire weather.** Active NWS Red Flag Warnings and Fire Weather Watches; alerts without a geometry are matched through their fire-weather zones. Current only, cached 15 minutes.
+- **Use.** Shown beside the fire statistics and added to the AI explanation facts. Not combined into any score, and not a forecast.
+
+## Alerts
+
+- Saved areas (JSON files in `data/alerts/`, git-ignored). Rules: Fire Risk Brief level Moderate or Severe; FIRMS near-real-time detections (nominal or high confidence, last 2 UTC days) inside the area or within X km, where the area is buffered in metres; active Red Flag Warning / Fire Weather Watch over the area.
+- Each event has a key (rule + month, latest detection date, or warning onset), so the same alert is stored and sent once.
+- Delivery: in-app inbox; optional webhook (JSON with a ready `text` field, https only) and e-mail via the server's SMTP settings.
+- Limits: NRT detections are not filtered for industrial sources; a prototype store for one server, not a multi-user notification service.

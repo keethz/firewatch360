@@ -136,4 +136,12 @@ Known limits: WUI and land cover cover the lower 48 only; WUI tiles are slow (ab
 - [x] Tests (5 new, model calls mocked); checked in the browser (Oct 2026, selected cell, AI-off fallback)
 - [ ] Not done: Isolation Forest (one value per cell per month gives it little to add over robust z); AI output checked live on the Sep 2020 Creek Fire cell; numbers match the statistics
 
+## Alerts, drought & fire-weather context, compare
+
+- [x] Drought (U.S. Drought Monitor) and NWS fire-weather context: `/api/context`, card on Explore and anomaly cells, added to AI facts
+- [x] Saved-area alerts: unusual activity, new NRT detections within X km, Red Flag / Fire Weather Watch; inbox, webhook, SMTP e-mail; `scripts/check_alerts.py` for cron
+- [x] Compare tab: two years or two areas, cell-days or % vs own median
+- [x] Tests (6 new, network mocked); checked in the browser (California drought, 2020 vs 2025, saved area with a live alert, phone width)
+- [ ] Not done: e-mail not tested against a real SMTP server; no scheduler inside the app (use cron); no user accounts (saved areas are shared by everyone using this server)
+
 ## Next: Phase 6 (deploy, README, demo recording)

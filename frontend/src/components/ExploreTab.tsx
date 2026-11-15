@@ -4,6 +4,7 @@ import { describeAoi, PRESETS, REGION, withAoi, type Aoi } from '../lib/aoi'
 import { getJson } from '../lib/api'
 import type { AnomaliesResponse, HotspotsResponse, ImpactResponse, NrtResponse } from '../types/api'
 import CurrentCard from './CurrentCard'
+import ContextCard from './ContextCard'
 import FireRiskBrief from './FireRiskBrief'
 import ImpactPanel from './ImpactPanel'
 import { OVERLAYS, type OverlayId, type VectorOverlay } from '../lib/overlays'
@@ -180,6 +181,7 @@ export default function ExploreTab({ aoi, setAoi }: Props) {
 
       <div className="min-w-0 space-y-3">
         <FireRiskBrief aoi={aoi} />
+        <div className="mt-4"><ContextCard aoi={aoi} /></div>
         <div className="grid gap-3 sm:grid-cols-3">
           <Card title={`Hotspots ${start} → ${end}`}>
             {hs.isError ? <p className="text-red-300">{(hs.error as Error).message}</p> : hs.data ? (

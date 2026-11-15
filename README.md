@@ -32,6 +32,9 @@ FIREWATCH 360 merges NASA FIRMS active-fire detections from **MODIS** (2000 onwa
   - map overlays for each layer
 - **Anomaly map**: which places had unusual fire activity in a month. Detections are grouped into map cells (0.1°–1°), each compared with the same month in past years (robust z-score), with a ranked list of the most unusual cells.
 - **AI explanations** (optional): an "Explain with AI" button on the Fire Risk Brief and on each anomaly cell. Google Gemini (gemini-3.8-flash, with gemini-3.5-flash-lite as a fallback) writes a short plain-language explanation using only the statistics the app computed. Needs `GEMINI_API_KEY` in `.env` on the server (free key from Google AI Studio); without it the app shows the rule-based text.
+- **Drought & fire weather**: for the selected area, the share in each U.S. Drought Monitor category (D0–D4) for the chosen month and now, the Drought Severity and Coverage Index, and any active NWS Red Flag Warning or Fire Weather Watch. Shown on Explore and for each anomaly cell, and passed to the AI explanations.
+- **Compare**: two years for the same area, or two areas in the same year. Monthly chart (cell-days or % vs each side's own median) and a table of totals, % vs median, peak month and unusual months.
+- **Alerts**: watch a saved area and get an alert when its activity is unusual, when new satellite detections appear inside it or within X km, or when a Red Flag Warning / Fire Weather Watch is issued. In-app inbox, optional webhook (Slack, Teams…) and e-mail (SMTP). Each alert is sent once. Run `backend/scripts/check_alerts.py` on a schedule (e.g. hourly cron).
 - **Current month**: month-to-date compared with the same days of that month in every baseline year. Labelled provisional.
 - **Method & data**: calibration charts and statistics, parameters, data as-of dates, limitations, attribution.
 - **Downloads**: harmonized calendar CSV (with the calibration in its header) and a raw hotspot CSV for the selected area and dates.
@@ -95,7 +98,7 @@ cd frontend && npm install && npm run dev                   # app on http://loca
 **3. Test.**
 
 ```bash
-cd backend && .venv/bin/pytest -q      # 76 tests; data-dependent tests skip if data is not built
+cd backend && .venv/bin/pytest -q      # 82 tests; data-dependent tests skip if data is not built
 cd frontend && npm run build && npm run lint
 ```
 
@@ -121,6 +124,9 @@ Common options: `grid_deg` (0.01), `min_confidence` (`low|nominal|high`, default
 | `GET /api/impact/features` | GeoJSON of an impact layer for the map (`layer=places|roads|hospitals|schools|firestations|airports`) |
 | `GET /api/anomaly-map` | Map cells with this month's value, baseline median, robust z and anomaly flag (`month`, `cell_deg`, `z_threshold`, `min_value`) |
 | `GET /api/explain/brief`, `/api/explain/cell` | AI explanation of the Brief or one anomaly cell, plus the facts sent to the model |
+| `GET /api/context` | Drought (selected `month` and latest week) and active fire-weather alerts for the area |
+| `GET/POST /api/alerts/areas`, `DELETE /api/alerts/areas/{id}` | Saved areas and their alert rules |
+| `POST /api/alerts/check`, `GET /api/alerts/events` | Check saved areas now; list alerts |
 | `GET /api/current` | Current month-to-date vs the same days in baseline years |
 | `GET /api/hotspots` | GeoJSON points for the map (capped; exact `total`) |
 | `GET /api/nrt` | Live FIRMS NRT hotspots, last 1–10 days (server-side key, cached) |
@@ -141,6 +147,8 @@ backend/
   app/services/brief.py      Fire Risk Brief rules
   app/services/impact.py     human-impact layers and fire exposure
   app/services/anomaly_map.py  per-cell anomaly map
+  app/services/context.py    drought (USDM) and NWS fire-weather context
+  app/services/alerts.py     saved areas, alert store, webhook/e-mail delivery
   app/services/explain.py    AI explanations (Gemini), facts-only prompt, disk cache
   scripts/                   data download, Parquet build, NRT mask validation
   tests/                     pytest suite
@@ -172,4 +180,4 @@ Phase 6 (deployment and demo) is not started. See [docs/IMPLEMENTATION_STATUS.md
 
 ## Data and attribution
 
-Fire data: NASA Fire Information for Resource Management System (FIRMS), <https://firms.modaps.eosdis.nasa.gov/>. MODIS Collection 6.1 and VIIRS S-NPP 375 m active fire products. Country boundary, places and roads: Natural Earth (public domain). Population and WUI: US Census 2020 via USFS / SILVIS Lab WUI 2020. Protected areas: USGS PAD-US. Hospitals: HIFLD (ORNL/DHS). Schools: NCES EDGE. Fire stations: USGS National Structures Dataset. Airports: OurAirports. Land cover: NLCD 2021 (MRLC). Basemap © CARTO, © OpenStreetMap contributors.
+Fire data: NASA Fire Information for Resource Management System (FIRMS), <https://firms.modaps.eosdis.nasa.gov/>. MODIS Collection 6.1 and VIIRS S-NPP 375 m active fire products. Country boundary, places and roads: Natural Earth (public domain). Population and WUI: US Census 2020 via USFS / SILVIS Lab WUI 2020. Protected areas: USGS PAD-US. Hospitals: HIFLD (ORNL/DHS). Schools: NCES EDGE. Fire stations: USGS National Structures Dataset. Airports: OurAirports. Land cover: NLCD 2021 (MRLC). Drought: U.S. Drought Monitor (NDMC, USDA, NOAA). Fire weather: NOAA National Weather Service. Basemap © CARTO, © OpenStreetMap contributors.

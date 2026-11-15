@@ -13,6 +13,12 @@ class Settings(BaseSettings):
     firms_map_key: str = ""
     # AI explanations: Google Gemini API (free tier available); off when the key is empty
     gemini_api_key: str = ""
+    # Alerts by e-mail (optional; in-app and webhook alerts need nothing)
+    smtp_host: str = ""
+    smtp_port: int = 587
+    smtp_user: str = ""
+    smtp_password: str = ""
+    alert_from: str = "firewatch360@localhost"
     gemini_model: str = "gemini-3.8-flash"
     gemini_fallback_model: str = "gemini-3.5-flash-lite"  # used when the main model is busy or slow
     data_dir: Path = PROJECT_ROOT / "data"

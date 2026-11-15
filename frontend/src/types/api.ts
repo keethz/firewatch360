@@ -290,3 +290,53 @@ export interface AnomalyMapResponse {
   top: AnomalyCell[]
   geojson: { type: 'FeatureCollection'; features: { type: 'Feature'; properties: AnomalyCell; geometry: unknown }[] }
 }
+
+export interface DroughtInfo {
+  status: 'ok' | 'unavailable'
+  message?: string
+  week?: string
+  share?: Record<'D0' | 'D1' | 'D2' | 'D3' | 'D4', number>
+  cumulative?: Record<string, number>
+  dsci?: number
+  worst_category?: string | null
+  worst_label?: string
+  text?: string
+  dsci_percentile?: number
+  dsci_median?: number
+}
+
+export interface FireWeatherAlert { event: string; headline: string | null; area: string | null; onset: string | null; ends: string | null; sender: string | null }
+
+export interface ContextResponse {
+  drought_month?: DroughtInfo
+  drought_latest: DroughtInfo
+  fire_weather: { status: 'ok' | 'unavailable'; message?: string; as_of?: string; active?: FireWeatherAlert[]; n_red_flag?: number; n_watch?: number }
+  source: Record<string, string>
+  note: string
+}
+
+export interface SavedArea {
+  id: string
+  name: string
+  aoi: string
+  anomaly: boolean
+  nrt_km: number | null
+  fire_weather: boolean
+  webhook_url: string | null
+  email: string | null
+  created_utc: string
+  last_checked_utc: string | null
+}
+
+export interface AlertEvent {
+  id: string
+  area_id: string
+  area_name: string
+  rule: 'anomaly' | 'nrt' | 'fire_weather'
+  title: string
+  detail: string
+  severity: 'high' | 'medium'
+  note?: string
+  created_utc: string
+  delivery?: Record<string, string | boolean>
+}

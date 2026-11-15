@@ -580,6 +580,7 @@ def explain_cell(request: Request, cy: int, cx: int, aoi: AOI = Depends(aoi_para
     """AI explanation of one anomaly-map cell (statistics computed here, wording by Gemini)."""
     res = _anomaly_map(request, aoi, p, month, cell_deg, z_threshold, min_value, None, None)
     facts = _cell_facts(res, cy, cx)
+    facts["drought"] = _drought_fact(request.app, facts["location"], res["cell_deg"], res["month"])
     return {"facts": facts, **request.app.state.explainer.explain(facts)}
 
 
@@ -590,4 +591,221 @@ def explain_brief(request: Request, aoi: AOI = Depends(aoi_param), p: Harmonizat
     b = brief(request, aoi, p, w)
     drop = {"generated_utc", "caveat"}
     facts = {"what": "Fire Risk Brief for a selected area", **{k: v for k, v in b.items() if k not in drop}}
+    try:
+        c = area_context(request.app, aoi, b["reference"]["month"])
+        d = c.get("drought_month", {})
+        if d.get("status") == "ok":
+            facts["drought_same_month"] = {"summary": d["text"], "dsci_0_500": d["dsci"], "week": d["week"],
+                                           "source": "U.S. Drought Monitor"}
+        if c["fire_weather"].get("status") == "ok" and b["reference"]["kind"] == "month_to_date":
+            facts["active_fire_weather_alerts_now"] = [a["event"] for a in c["fire_weather"]["active"]]
+    except Exception:  # context is optional for the explanation
+        pass
     return {"facts": facts, **request.app.state.explainer.explain(facts)}
+
+
+# ---------------------------------------------------------------- Drought and fire-weather context
+
+import httpx  # noqa: E402
+
+from app.services import context as ctx  # noqa: E402
+
+CONUS_BBOX = "-125,24,-66,50"
+
+
+def _context_geo(aoi: AOI):
+    return imp.make_geo(parse_aoi(bbox=CONUS_BBOX) if aoi.kind == "region" else aoi)
+
+
+def area_context(app, aoi: AOI, month: str | None, history: bool = False) -> dict:
+    """Drought for `month` (and the latest week), plus active fire-weather alerts."""
+    cli: ctx.ContextClient = app.state.context
+    geo = _context_geo(aoi)
+    out: dict = {"source": {"drought": "U.S. Drought Monitor (NDMC, USDA, NOAA), weekly maps",
+                            "fire_weather": "NWS active Red Flag Warnings and Fire Weather Watches"},
+                 "note": "Context only. Not a fire-danger forecast."}
+    weeks = {}
+    if month:
+        weeks["month"] = ctx.usdm_week_for_month(month, cli.today())
+    weeks["latest"] = ctx.latest_usdm_week(cli.today())
+    for name, wk in weeks.items():
+        if wk is None:
+            out[f"drought_{name}"] = {"status": "unavailable", "message": "No Drought Monitor map for that month (maps start 2000-01)."}
+            continue
+        try:
+            out[f"drought_{name}"] = {"status": "ok", **cli.drought(geo.geom, geo.fwd, wk)}
+        except (httpx.HTTPError, ValueError, KeyError):
+            out[f"drought_{name}"] = {"status": "unavailable", "message": "Could not load the Drought Monitor map."}
+    if history and month and out.get("drought_month", {}).get("status") == "ok":
+        y = int(month[:4])
+        hist = cli.drought_history(geo.geom, geo.fwd, month, [v for v in range(2000, y)])
+        if hist:
+            cur = out["drought_month"]["dsci"]
+            out["drought_month"]["history"] = hist
+            out["drought_month"]["dsci_percentile"] = ctx.percentile_of(cur, [h["dsci"] for h in hist])
+            out["drought_month"]["dsci_median"] = float(np.median([h["dsci"] for h in hist]))
+    try:
+        out["fire_weather"] = cli.fire_weather(geo.geom)
+    except (httpx.HTTPError, ValueError, KeyError):
+        out["fire_weather"] = {"status": "unavailable", "message": "Could not reach the National Weather Service."}
+    return out
+
+
+@router.get("/context")
+def context(request: Request, aoi: AOI = Depends(aoi_param), month: str | None = None, history: bool = False) -> dict:
+    """Drought (selected month and latest week) and active fire-weather alerts for the area."""
+    if month is not None and not MONTH_RE.match(month):
+        raise HTTPException(422, "month must be YYYY-MM")
+    return area_context(request.app, aoi, month, history)
+
+
+def _drought_fact(app, loc: dict, cell_deg: float, month: str) -> dict | None:
+    lat, lon, h = loc["lat_center"], loc["lon_center"], cell_deg / 2
+    try:
+        cli = app.state.context
+        wk = ctx.usdm_week_for_month(month, cli.today())
+        if wk is None:
+            return None
+        geo = imp.make_geo(parse_aoi(bbox=f"{lon - h},{lat - h},{lon + h},{lat + h}"))
+        d = cli.drought(geo.geom, geo.fwd, wk)
+        return {"summary": d["text"], "dsci_0_500": d["dsci"], "week": d["week"], "source": "U.S. Drought Monitor"}
+    except Exception:  # context is optional for the explanation
+        return None
+
+
+# ---------------------------------------------------------------- Saved areas and alerts
+
+import json  # noqa: E402
+import time  # noqa: E402
+import uuid  # noqa: E402
+from types import SimpleNamespace  # noqa: E402
+
+from pydantic import BaseModel, Field  # noqa: E402
+
+from app.services import alerts as al  # noqa: E402
+from app.services.nrt import filter_aoi  # noqa: E402
+
+
+class AreaIn(BaseModel):
+    name: str = Field(min_length=1, max_length=80)
+    aoi: str = Field(min_length=1, max_length=20000, description="area query string, e.g. bbox=w,s,e,n")
+    anomaly: bool = True
+    nrt_km: float | None = Field(5, ge=0, le=100)
+    fire_weather: bool = True
+    webhook_url: str | None = Field(None, max_length=500)
+    email: str | None = Field(None, max_length=200)
+
+
+def _area_aoi(area: dict) -> AOI:
+    try:
+        aoi = parse_aoi(**al.aoi_kwargs(area["aoi"]))
+    except (AOIError, ValueError) as exc:
+        raise HTTPException(422, f"Invalid area: {exc}") from exc
+    if aoi.kind == "region":
+        raise HTTPException(422, "Save a specific area (preset, drawn shape or point + radius), not the whole region")
+    return aoi
+
+
+def evaluate_area(app, area: dict) -> list[dict]:
+    """Evaluate one saved area's rules; return candidate events (not yet deduplicated)."""
+    aoi = _area_aoi(area)
+    now = time.strftime("%Y-%m-%dT%H:%MZ", time.gmtime())
+    events: list[dict] = []
+
+    def ev(rule, key, title, detail, severity, **extra):
+        events.append({"id": uuid.uuid4().hex[:12], "area_id": area["id"], "area_name": area["name"], "rule": rule,
+                       "key": f"{rule}:{key}", "title": title, "detail": detail, "severity": severity,
+                       "created_utc": now, **extra})
+
+    if area.get("anomaly"):
+        try:
+            b = brief(SimpleNamespace(app=app), aoi, HarmonizationParams(),
+                      {"start": None, "end": None, "year": None, "b0": None, "b1": None, "z": 2.0})
+            if b["level"] in ("Moderate", "Severe"):
+                ref = b["reference"]
+                ev("anomaly", f"{ref['month']}:{b['level']}", f"{b['level']} fire activity anomaly",
+                   f"{ref['label']}: {b['current_activity']['text'] or ''} (robust z {b['current_activity']['z']:.1f}); "
+                   f"{b['rank']['text'] if isinstance(b.get('rank'), dict) and b['rank'].get('text') else ''}".strip(),
+                   "high" if b["level"] == "Severe" else "medium",
+                   note="Compared with the same period in the baseline years. Provisional data may change.")
+        except HTTPException:
+            pass
+    km = area.get("nrt_km")
+    if km is not None:
+        geo = imp.make_geo(aoi)
+        zone = geo.geom_m.buffer(km * 1000) if km > 0 else geo.geom_m
+        inv = imp.Transformer.from_crs(geo.fwd.target_crs, 4326, always_xy=True)
+        zone_ll = imp.shp_transform(inv.transform, zone.simplify(200))
+        zone_aoi = parse_aoi(polygon=json.dumps(imp.mapping(zone_ll)))
+        try:
+            rows = filter_aoi(app.state.nrt.fetch(zone_aoi, 2, ["VIIRS", "MODIS"]), zone_aoi)
+        except NrtError:
+            rows = None
+        rows = [r for r in (rows or []) if to_feature(r)["properties"]["confidence"] != "low"]
+        if rows:
+            last = max(str(r["acq_date"]) for r in rows)
+            n_in = len(filter_aoi(rows, aoi))
+            ev("nrt", last, f"{len(rows)} new satellite fire detections",
+               f"{len(rows)} near-real-time detections in the last 2 days ({n_in} inside the area, the rest within {km:g} km), "
+               f"latest on {last}.", "high" if n_in else "medium",
+               note="Live FIRMS data; may include industrial heat sources.")
+    if area.get("fire_weather"):
+        fw = area_context(app, aoi, None)["fire_weather"]
+        for a in fw.get("active", []):
+            ev("fire_weather", f"{a['event']}:{a['onset']}", f"{a['event']} in effect", a.get("headline") or a["event"],
+               "high" if a["event"] == "Red Flag Warning" else "medium", note=f"Issued by {a.get('sender') or 'NWS'}.")
+    return events
+
+
+def check_areas(app, area_id: str | None = None) -> dict:
+    store: al.AlertStore = app.state.alerts
+    s = app.state.settings
+    smtp = {"host": s.smtp_host, "port": s.smtp_port, "user": s.smtp_user, "password": s.smtp_password, "from": s.alert_from}
+    areas = [a for a in store.areas() if area_id is None or a["id"] == area_id]
+    if area_id and not areas:
+        raise HTTPException(404, "No saved area with that id")
+    new = []
+    for a in areas:
+        fresh = store.add_events(evaluate_area(app, a))
+        for e in fresh:
+            e["delivery"] = al.deliver(e, a, smtp)
+        store.touch(a["id"])
+        new += fresh
+    return {"checked": len(areas), "new_events": new}
+
+
+@router.get("/alerts/areas")
+def list_areas(request: Request) -> dict:
+    return {"areas": request.app.state.alerts.areas()}
+
+
+@router.post("/alerts/areas")
+def add_area(request: Request, body: AreaIn) -> dict:
+    area = body.model_dump()
+    _area_aoi(area)
+    if area["webhook_url"] and not al.valid_webhook(area["webhook_url"]):
+        raise HTTPException(422, "webhook_url must be https:// (or http://localhost)")
+    if area["email"] and "@" not in area["email"]:
+        raise HTTPException(422, "email is not valid")
+    try:
+        return request.app.state.alerts.add_area(area)
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+
+
+@router.delete("/alerts/areas/{area_id}")
+def delete_area(request: Request, area_id: str) -> dict:
+    if not request.app.state.alerts.delete_area(area_id):
+        raise HTTPException(404, "No saved area with that id")
+    return {"deleted": area_id}
+
+
+@router.post("/alerts/check")
+def run_check(request: Request, area_id: str | None = None) -> dict:
+    """Evaluate saved areas now (also run by scripts/check_alerts.py on a schedule)."""
+    return check_areas(request.app, area_id)
+
+
+@router.get("/alerts/events")
+def list_events(request: Request, area_id: str | None = None, limit: int = Query(100, ge=1, le=1000)) -> dict:
+    return {"events": request.app.state.alerts.events(area_id)[:limit]}
