@@ -1,7 +1,7 @@
 import { useState, type RefObject } from 'react'
 import { renderPanel } from '../lib/renderPanel'
 
-/** Capture every panel (<section>) directly inside `container` and save them as one PDF, one panel per A4 landscape page. */
+/** Capture every panel inside `container` (elements marked data-pdf="Title", else top-level <section>s) and save them as one PDF, one panel per A4 landscape page. */
 export default function AllPanelsPdf({ container, fileName, area }: { container: RefObject<HTMLElement | null>; fileName: string; area: string }) {
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState('')
@@ -12,13 +12,14 @@ export default function AllPanelsPdf({ container, fileName, area }: { container:
     setBusy(true)
     setErr('')
     try {
-      const sections = Array.from(root.querySelectorAll<HTMLElement>(':scope > section'))
+      const marked = Array.from(root.querySelectorAll<HTMLElement>('[data-pdf]'))
+      const sections = marked.length ? marked : Array.from(root.querySelectorAll<HTMLElement>(':scope > section'))
       if (!sections.length) throw new Error('nothing to export yet')
       const { jsPDF } = await import('jspdf')
       const pdf = new jsPDF({ orientation: 'landscape', unit: 'pt', format: 'a4' })
       const pw = pdf.internal.pageSize.getWidth(), ph = pdf.internal.pageSize.getHeight(), m = 24
       for (const [i, sec] of sections.entries()) {
-        const title = sec.querySelector('h2')?.textContent?.trim() || `Panel ${i + 1}`
+        const title = sec.dataset.pdf || sec.querySelector('h2')?.textContent?.trim() || `Panel ${i + 1}`
         const canvas = await renderPanel(sec, `${title} · ${area}`)
         const scale = Math.min((pw - 2 * m) / canvas.width, (ph - 2 * m) / canvas.height)
         const w = canvas.width * scale, h = canvas.height * scale

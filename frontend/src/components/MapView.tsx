@@ -70,7 +70,8 @@ export default function MapView({ aoi, onAoi, mode, onModeDone, circleKm, hotspo
   // ---------------------------------------------------------------- init
   useEffect(() => {
     if (!el.current) return
-    const map = new maplibregl.Map({ container: el.current, style: STYLE_URL, bounds: US_BOUNDS, attributionControl: { compact: true } })
+    const map = new maplibregl.Map({ container: el.current, style: STYLE_URL, bounds: US_BOUNDS, attributionControl: { compact: true },
+      canvasContextAttributes: { preserveDrawingBuffer: true } /* lets the PDF export capture the map */ })
     mapRef.current = map
     map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'top-right')
     map.addControl(new maplibregl.ScaleControl({ unit: 'metric' }), 'bottom-left')
@@ -277,7 +278,7 @@ export default function MapView({ aoi, onAoi, mode, onModeDone, circleKm, hotspo
   }, [hotspots, ready])
 
   return (
-    <div className="relative h-[62vh] min-h-80 w-full overflow-hidden rounded-lg border border-slate-800">
+    <div data-pdf="Hotspot map" className="relative h-[62vh] min-h-80 w-full overflow-hidden rounded-lg border border-slate-800">
       <div ref={el} className="h-full w-full" role="application" aria-label="Map of hotspots and area of interest" />
       {mode === 'polygon' && (
         <div className="absolute left-2 top-2 flex items-center gap-2 rounded bg-slate-900/90 px-2 py-1 text-xs">

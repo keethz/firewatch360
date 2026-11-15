@@ -1,8 +1,9 @@
 import { keepPreviousData, useQueries, useQuery } from '@tanstack/react-query'
-import { useEffect, useState, type FormEvent } from 'react'
+import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { describeAoi, PRESETS, REGION, withAoi, type Aoi } from '../lib/aoi'
 import { getJson, todayUtc, notFuture } from '../lib/api'
 import type { AnomaliesResponse, HotspotsResponse, ImpactResponse, NrtResponse, ReportedResponse } from '../types/api'
+import AllPanelsPdf from './AllPanelsPdf'
 import CurrentCard from './CurrentCard'
 import ContextCard from './ContextCard'
 import FireRiskBrief from './FireRiskBrief'
@@ -83,6 +84,7 @@ export default function ExploreTab({ aoi, setAoi }: Props) {
     staleTime: 10 * 60 * 1000,
   })
 
+  const mainRef = useRef<HTMLDivElement>(null)
   return (
     <div className="grid gap-4 lg:grid-cols-[17rem_1fr]">
       <aside className="space-y-2 text-sm lg:sticky lg:top-2 lg:max-h-[calc(100vh-1rem)] lg:self-start lg:overflow-y-auto" aria-label="Map controls">
@@ -184,8 +186,11 @@ export default function ExploreTab({ aoi, setAoi }: Props) {
         </a>
       </aside>
 
-      <div className="min-w-0 space-y-3">
-        <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+      <div ref={mainRef} className="min-w-0 space-y-3">
+        <div data-noexport className="flex justify-end">
+          <AllPanelsPdf container={mainRef} fileName={`firewatch360-explore-${start}_${end}`} area={describeAoi(aoi)} />
+        </div>
+        <div data-pdf="Summary" className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
           <Card title={`Hotspots ${start} → ${end}`}>
             {hs.isError ? <p className="text-red-300">{(hs.error as Error).message}</p> : hs.data ? (
               <>
@@ -225,7 +230,7 @@ export default function ExploreTab({ aoi, setAoi }: Props) {
               </button>
             ))}
           </div>
-          <div className="pt-3" role="tabpanel">
+          <div data-pdf={panel === 'brief' ? 'Fire Risk Brief' : panel === 'impact' ? 'What could this affect?' : 'Drought & weather'} className="pt-3" role="tabpanel">
             {panel === 'brief' && <FireRiskBrief aoi={aoi} />}
             {panel === 'context' && <ContextCard aoi={aoi} />}
             {panel === 'impact' && <ImpactPanel data={hasAoi ? impactQ.data : ({ status: 'aoi_required', message: 'Select an area (preset, drawn shape or point + radius) to see what nearby fire activity could affect: people, homes in the wildland–urban interface, roads, hospitals, schools, airports, protected land and farmland.' } as ImpactResponse)}
