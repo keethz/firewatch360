@@ -129,4 +129,11 @@ _Last updated: 2026-11-14_
 
 Known limits: WUI and land cover cover the lower 48 only; WUI tiles are slow (about 8 s per tile from USFS); PAD-US tiles stop at zoom 7; the first WUI query for a very large area can take up to about 75 s (then cached).
 
+## Anomaly detection and AI explanations
+
+- [x] Per-cell anomaly map (`/api/anomaly-map`, Anomaly map tab): map cells of 0.1°–1°, robust z vs the same month in past years, flags, ranked list, colorblind-safe diverging ramps
+- [x] AI explanations (`/api/explain/brief`, `/api/explain/cell`) with Google Gemini, facts-only prompt, disk cache, rule-based fallback
+- [x] Tests (5 new, model calls mocked); checked in the browser (Oct 2026, selected cell, AI-off fallback)
+- [ ] Not done: Isolation Forest (one value per cell per month gives it little to add over robust z); AI output checked live on the Sep 2020 Creek Fire cell; numbers match the statistics
+
 ## Next: Phase 6 (deploy, README, demo recording)

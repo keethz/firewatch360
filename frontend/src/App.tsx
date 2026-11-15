@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import AnomalyTab from './components/AnomalyTab'
 import CalendarTab from './components/CalendarTab'
 import ExploreTab from './components/ExploreTab'
 import MethodTab from './components/MethodTab'
@@ -7,6 +8,7 @@ import { REGION, type Aoi } from './lib/aoi'
 const TABS = [
   { id: 'explore', label: 'Explore' },
   { id: 'history', label: 'Calendar' },
+  { id: 'anomalies', label: 'Anomaly map' },
   { id: 'method', label: 'Method & data' },
 ] as const
 type Tab = (typeof TABS)[number]['id']
@@ -51,6 +53,7 @@ export default function App() {
       <main role="tabpanel" id="panel" aria-labelledby={`tab-${tab}`}>
         {tab === 'explore' && <ExploreTab aoi={aoi} setAoi={setAoi} />}
         {tab === 'history' && <CalendarTab aoi={aoi} />}
+        {tab === 'anomalies' && <AnomalyTab aoi={aoi} />}
         {tab === 'method' && <MethodTab aoi={aoi} />}
       </main>
 

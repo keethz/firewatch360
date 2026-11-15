@@ -150,3 +150,20 @@ Checks against known events (default 5 km):
 |---|---|---|---|---|---|
 | Thomas Fire, 60 km around 34.4, −119.2, 2017-12-04..31 | 10,810 | 506,230 | 120 | 11 (1,510) | 1,322 km² (Los Padres NF 1,175 km²) |
 | Camp Fire, 40 km around 39.76, −121.6, 2018-11-08..25 | 5,398 | 70,137 | 35 | 0 (nearest 6.1 km) | 378 km² (Plumas NF 212 km²) |
+
+## Anomaly map ("where is fire activity unusual?")
+
+- **Cells.** Fire cell-days (0.01° cell × UTC day, the same unit as the series) are grouped into map cells of 0.1°, 0.25° (default), 0.5° or 1°.
+- **Harmonization per cell.** For the chosen calendar month, each year's value uses the selected area's factors: `k·c·Terra` before Aqua, `k·MODIS` before VIIRS, observed VIIRS after. Provisional months use NRT VIIRS (MODIS NRT × k if VIIRS is missing) with the static-source mask.
+- **Baseline.** The same calendar month in complete years (default 2001 to the year before the target, at least 5 years; the target year is excluded).
+- **Score.** Robust z = (value − median) / max(1.4826·MAD, √max(median, 1)). The floor is roughly the Poisson spread of the median count. Without it, a cell that almost never burns would score z in the thousands from a few detections.
+- **Flag.** z ≥ threshold (default 2) **and** value ≥ 10 cell-days. Cells with no detections in the month or the baseline are not shown.
+- **Limits.** One k and c for all cells (not per cell). Cells that rarely burn (median 0) still reach high z with modest counts; the value and median are always shown beside z. 25 baseline years give a coarse rank only. Not a fire-danger index.
+- **Check.** September 2020 flags the Creek Fire (37.3°N, 119.4°W) and August Complex (40°N, 123°W) cells first.
+
+## AI explanations
+
+- Optional; on only if `GEMINI_API_KEY` is set on the server. The key is sent only in a request header to Google and never reaches the browser.
+- The model (Google Gemini 3.8 Flash, falling back to 3.5 Flash-Lite when busy; temperature 0.2, low thinking) receives only a JSON object of statistics the app computed (the Brief, or one anomaly cell) and a system prompt: use only these facts, no causes or named fires, units are cell-days, no forecasts or safety advice, mention data caveats, under 120 words.
+- Every answer is labelled AI-generated, and the facts sent to the model are returned by the API so they can be checked. Answers are cached on disk by a hash of the facts.
+- If the key is missing, the service fails or the model declines, the panel says so and shows the rule-based sentence instead. No numbers come from the model.

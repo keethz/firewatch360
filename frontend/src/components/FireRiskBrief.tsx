@@ -3,6 +3,7 @@ import { useRef, useState } from 'react'
 import { describeAoi, withAoi, type Aoi } from '../lib/aoi'
 import { getJson } from '../lib/api'
 import type { BriefResponse } from '../types/api'
+import AiExplanation from './AiExplanation'
 
 const MONTH_NAMES: Record<string, string> = {
   Jan: 'January', Feb: 'February', Mar: 'March', Apr: 'April', May: 'May', Jun: 'June',
@@ -126,6 +127,10 @@ export default function FireRiskBrief({ aoi, extra = '' }: { aoi: Aoi; extra?: s
           <Fact label="Baseline" value={b.baseline.years ? `${b.baseline.years[0]}–${b.baseline.years[1]}` : '—'}
                 note={`${b.baseline.n_years} years · k = ${b.factors.k.toFixed(2)}, c = ${b.factors.c.toFixed(2)}`} />
         </dl>
+
+        <div className="mt-3" data-noexport>
+          <AiExplanation url={withAoi('/api/explain/brief', aoi, query)} fallback={b.headline} />
+        </div>
 
         <p className="mt-3 text-xs text-slate-500">
           Generated {b.generated_utc}. Final data through MODIS {b.data_as_of.final.MODIS}, VIIRS {b.data_as_of.final.VIIRS}; near-real-time through{' '}

@@ -496,3 +496,98 @@ def impact_features(request: Request, layer: str, aoi: AOI = Depends(aoi_param),
               "properties": {"layer": layer, **{c: imp._py(getattr(r, c)) for c in keep}}}
              for r in sub.itertuples(index=False)]
     return {"type": "FeatureCollection", "features": feats, "total": total, "sampled": total > len(feats)}
+
+
+# ---------------------------------------------------------------- Anomaly map + AI explanations
+
+from app.services import anomaly_map as amap  # noqa: E402
+
+_AMAP_CACHE: dict = {}
+
+
+def _anomaly_map(request: Request, aoi: AOI, p: HarmonizationParams, month: str | None, cell_deg: float,
+                 z_threshold: float, min_value: float, baseline_start: int | None, baseline_end: int | None) -> dict:
+    _store(request)
+    h = request.app.state.harmonizer
+    win = h.windows()
+    latest = win["provisional_end"] or win["series_end"]
+    month = month or latest
+    if not MONTH_RE.match(month):
+        raise HTTPException(422, "month must be YYYY-MM")
+    if month < win["series_start"] or month > latest:
+        raise HTTPException(422, f"month must be between {win['series_start']} and {latest}")
+    provisional = month > win["series_end"]
+    se = win["series_end"]
+    last_complete = int(se[:4]) if se.endswith("-12") else int(se[:4]) - 1
+    first_complete = int(win["series_start"][:4]) + (0 if win["series_start"].endswith("-01") else 1)
+    b0 = baseline_start or first_complete
+    b1 = baseline_end or min(last_complete, int(month[:4]) - 1 if int(month[:4]) - 1 >= b0 + 4 else last_complete)
+    key = (aoi.key, p, month, cell_deg, z_threshold, min_value, b0, b1)
+    if key not in _AMAP_CACHE:
+        cal = h.calibration(aoi, p)["calibration"]
+        tc = h.terra_correction(aoi, p)
+        try:
+            res = amap.build_map(h.store, aoi, p, month, (b0, b1), cal["k"], tc["c"], win, cell_deg,
+                                 z_threshold, min_value, provisional)
+        except ValueError as exc:
+            raise HTTPException(422, str(exc)) from exc
+        res["calibration_scope"] = cal["scope"]
+        if len(_AMAP_CACHE) > 64:
+            _AMAP_CACHE.clear()
+        _AMAP_CACHE[key] = res
+    return _AMAP_CACHE[key]
+
+
+@router.get("/anomaly-map")
+def anomaly_map(request: Request, aoi: AOI = Depends(aoi_param), p: HarmonizationParams = Depends(params_param),
+                month: str | None = Query(None, description="YYYY-MM (default: latest complete month)"),
+                cell_deg: float = Query(0.25, ge=0.05, le=1.0), z_threshold: float = Query(2.0, gt=0),
+                min_value: float = Query(10, ge=0), baseline_start: int | None = None,
+                baseline_end: int | None = None) -> dict:
+    """Map cells whose fire activity this month is unusual against the same month in past years."""
+    res = _anomaly_map(request, aoi, p, month, cell_deg, z_threshold, min_value, baseline_start, baseline_end)
+    return {**{k: v for k, v in res.items() if k != "cells"}, "top": res["cells"][:15],
+            "geojson": amap.to_geojson(res)}
+
+
+def _cell_facts(res: dict, cy: int, cx: int) -> dict:
+    cell = next((c for c in res["cells"] if c["cell"] == [cy, cx]), None)
+    if cell is None:
+        raise HTTPException(404, "No fire activity in that map cell for this month or its baseline")
+    w, s, e, n = cell["bbox"]
+    return {
+        "what": "One map cell compared with the same calendar month in earlier years",
+        "location": {"lat_center": round((s + n) / 2, 3), "lon_center": round((w + e) / 2, 3),
+                     "cell_size_deg": res["cell_deg"], "approx_size_km": round(res["cell_deg"] * 111)},
+        "month": res["month"], "provisional_nrt_data": res["provisional"],
+        "value_cell_days": cell["value"], "baseline_median_cell_days": cell["median"],
+        "baseline_years": res["baseline_years"], "baseline_max_cell_days": cell["baseline_max"],
+        "pct_vs_median": cell["pct_vs_median"],
+        "times_median": None if not cell["median"] else round(cell["value"] / cell["median"], 1),
+        "robust_z": cell["z"], "flagged_unusual": cell["anomaly"], "flag_threshold_z": res["z_threshold"],
+        "rank_among_years": f"{cell['rank']} of {cell['of']} (1 = highest)",
+        "calibration": {"k_viirs_per_modis": round(res["k"], 3), "c_pre_aqua": round(res["c"], 3),
+                        "scope": res.get("calibration_scope")},
+        "sensors": "MODIS before 2012-02 scaled to VIIRS-equivalent; VIIRS S-NPP after",
+    }
+
+
+@router.get("/explain/cell")
+def explain_cell(request: Request, cy: int, cx: int, aoi: AOI = Depends(aoi_param),
+                 p: HarmonizationParams = Depends(params_param), month: str | None = None,
+                 cell_deg: float = Query(0.25, ge=0.05, le=1.0), z_threshold: float = Query(2.0, gt=0),
+                 min_value: float = Query(10, ge=0)) -> dict:
+    """AI explanation of one anomaly-map cell (statistics computed here, wording by Gemini)."""
+    res = _anomaly_map(request, aoi, p, month, cell_deg, z_threshold, min_value, None, None)
+    facts = _cell_facts(res, cy, cx)
+    return {"facts": facts, **request.app.state.explainer.explain(facts)}
+
+
+@router.get("/explain/brief")
+def explain_brief(request: Request, aoi: AOI = Depends(aoi_param), p: HarmonizationParams = Depends(params_param),
+                  w: dict = Depends(window_param)) -> dict:
+    """AI explanation of the Fire Risk Brief numbers for the selected area."""
+    b = brief(request, aoi, p, w)
+    drop = {"generated_utc", "caveat"}
+    facts = {"what": "Fire Risk Brief for a selected area", **{k: v for k, v in b.items() if k not in drop}}
+    return {"facts": facts, **request.app.state.explainer.explain(facts)}

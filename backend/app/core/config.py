@@ -11,6 +11,10 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=(PROJECT_ROOT / ".env", ".env"), extra="ignore")
 
     firms_map_key: str = ""
+    # AI explanations: Google Gemini API (free tier available); off when the key is empty
+    gemini_api_key: str = ""
+    gemini_model: str = "gemini-3.8-flash"
+    gemini_fallback_model: str = "gemini-3.5-flash-lite"  # used when the main model is busy or slow
     data_dir: Path = PROJECT_ROOT / "data"
     frontend_origin: str = "http://localhost:5173"
 

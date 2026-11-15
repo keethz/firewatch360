@@ -30,6 +30,8 @@ FIREWATCH 360 merges NASA FIRMS active-fire detections from **MODIS** (2000 onwa
   - for any area, what lies inside it and within a chosen distance of its fire detections: 2020 Census population and housing, homes in the wildland–urban interface, population centers, major roads, hospitals (with beds), schools, fire stations, airports, protected land and farmland
   - nearest named facilities
   - map overlays for each layer
+- **Anomaly map**: which places had unusual fire activity in a month. Detections are grouped into map cells (0.1°–1°), each compared with the same month in past years (robust z-score), with a ranked list of the most unusual cells.
+- **AI explanations** (optional): an "Explain with AI" button on the Fire Risk Brief and on each anomaly cell. Google Gemini (gemini-3.8-flash, with gemini-3.5-flash-lite as a fallback) writes a short plain-language explanation using only the statistics the app computed. Needs `GEMINI_API_KEY` in `.env` on the server (free key from Google AI Studio); without it the app shows the rule-based text.
 - **Current month**: month-to-date compared with the same days of that month in every baseline year. Labelled provisional.
 - **Method & data**: calibration charts and statistics, parameters, data as-of dates, limitations, attribution.
 - **Downloads**: harmonized calendar CSV (with the calibration in its header) and a raw hotspot CSV for the selected area and dates.
@@ -93,7 +95,7 @@ cd frontend && npm install && npm run dev                   # app on http://loca
 **3. Test.**
 
 ```bash
-cd backend && .venv/bin/pytest -q      # 71 tests; data-dependent tests skip if data is not built
+cd backend && .venv/bin/pytest -q      # 76 tests; data-dependent tests skip if data is not built
 cd frontend && npm run build && npm run lint
 ```
 
@@ -117,6 +119,8 @@ Common options: `grid_deg` (0.01), `min_confidence` (`low|nominal|high`, default
 | `GET /api/brief` | Fire Risk Brief for the area (`end=YYYY-MM` for a past month) |
 | `GET /api/impact` | Population, WUI, roads, hospitals, schools, airports, protected land and farmland in the area and near its fire detections (`start`, `end`, `buffer_km`) |
 | `GET /api/impact/features` | GeoJSON of an impact layer for the map (`layer=places|roads|hospitals|schools|firestations|airports`) |
+| `GET /api/anomaly-map` | Map cells with this month's value, baseline median, robust z and anomaly flag (`month`, `cell_deg`, `z_threshold`, `min_value`) |
+| `GET /api/explain/brief`, `/api/explain/cell` | AI explanation of the Brief or one anomaly cell, plus the facts sent to the model |
 | `GET /api/current` | Current month-to-date vs the same days in baseline years |
 | `GET /api/hotspots` | GeoJSON points for the map (capped; exact `total`) |
 | `GET /api/nrt` | Live FIRMS NRT hotspots, last 1–10 days (server-side key, cached) |
@@ -136,6 +140,8 @@ backend/
   app/services/nrt.py        live FIRMS NRT proxy with disk cache
   app/services/brief.py      Fire Risk Brief rules
   app/services/impact.py     human-impact layers and fire exposure
+  app/services/anomaly_map.py  per-cell anomaly map
+  app/services/explain.py    AI explanations (Gemini), facts-only prompt, disk cache
   scripts/                   data download, Parquet build, NRT mask validation
   tests/                     pytest suite
 frontend/src/

@@ -247,3 +247,46 @@ export interface ImpactResponse {
   filters: { start: string; end: string }
   note: string
 }
+
+export interface ExplainResponse {
+  status: 'ok' | 'not_configured' | 'unavailable'
+  text?: string
+  model?: string
+  label?: string
+  message?: string
+  cached?: boolean
+  facts: Record<string, unknown>
+}
+
+export interface AnomalyCell {
+  cell: [number, number]
+  bbox: [number, number, number, number]
+  value: number
+  median: number
+  scale: number
+  z: number
+  pct_vs_median: number | null
+  baseline_max: number
+  rank: number
+  of: number
+  anomaly: boolean
+  below: boolean
+}
+
+export interface AnomalyMapResponse {
+  month: string
+  provisional: boolean
+  cell_deg: number
+  baseline_years: [number, number]
+  n_baseline_years: number
+  z_threshold: number
+  min_value: number
+  k: number
+  c: number
+  calibration_scope: string
+  n_cells: number
+  n_anomalous: number
+  method: string
+  top: AnomalyCell[]
+  geojson: { type: 'FeatureCollection'; features: { type: 'Feature'; properties: AnomalyCell; geometry: unknown }[] }
+}
