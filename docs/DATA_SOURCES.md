@@ -83,6 +83,7 @@ Static layers are built by `backend/scripts/prepare_impact.py` into `data/proces
 | Hospitals | HIFLD Hospitals (ORNL/DHS), copy hosted by PASDA (Penn State); STATUS = OPEN (7,966) | static | 50 states | Public domain |
 | Schools | NCES EDGE public school locations 2022–23 (102,268) | static | 50 states | Public domain |
 | Fire stations | USGS National Structures Dataset, Fire Stations/EMS Stations (52,010), carto.nationalmap.gov structures MapServer layer 51 | static | 50 states + territories | Public domain |
+| Reported fires | NIFC WFIGS Incident Locations (IRWIN), services3.arcgis.com/T4QMspbfLg3qTGWY WFIGS_Incident_Locations | live query | US, 2014 onward | Public (US Government) |
 | Agriculture | NLCD 2021 land cover (MRLC WCS), classes 81 pasture/hay and 82 cultivated crops | live raster, downsampled to ≤1,500 px | Conterminous US | Public domain |
 
 Map tiles: PAD-US (USGS cached tiles to zoom 7), WUI 2020 (USFS map export, slow), NLCD 2021 (MRLC WMS).

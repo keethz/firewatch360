@@ -1,12 +1,13 @@
 // Human-impact map overlays. Vector layers come from /api/impact/features; raster layers are
 // public tile services from the data providers (no keys).
 
-export type VectorOverlay = 'places' | 'roads' | 'hospitals' | 'schools' | 'firestations' | 'airports'
+export type VectorOverlay = 'places' | 'roads' | 'hospitals' | 'schools' | 'firestations' | 'airports' | 'reported'
 export type RasterOverlay = 'protected' | 'wui' | 'landcover'
 export type OverlayId = VectorOverlay | RasterOverlay | 'firezone'
 
 export const OVERLAYS: { id: OverlayId; label: string; kind: 'vector' | 'raster' | 'zone'; color: string; glyph?: string; note: string }[] = [
   { id: 'firezone', label: 'Fire exposure zone', kind: 'zone', color: '#f43f5e', note: 'Within the buffer distance of a fire detection' },
+  { id: 'reported', label: 'Reported fires (NIFC)', kind: 'vector', color: '#f59e0b', glyph: 'R', note: 'NIFC WFIGS incidents in the date range, 2014+; size by acres' },
   { id: 'places', label: 'Population centers', kind: 'vector', color: '#e2e8f0', glyph: 'P', note: 'Natural Earth populated places' },
   { id: 'roads', label: 'Major roads', kind: 'vector', color: '#facc15', note: 'Natural Earth highways' },
   { id: 'hospitals', label: 'Hospitals', kind: 'vector', color: '#f472b6', glyph: 'H', note: 'HIFLD, open facilities' },

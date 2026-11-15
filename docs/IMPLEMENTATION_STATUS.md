@@ -144,4 +144,10 @@ Known limits: WUI and land cover cover the lower 48 only; WUI tiles are slow (ab
 - [x] Tests (6 new, network mocked); checked in the browser (California drought, 2020 vs 2025, saved area with a live alert, phone width)
 - [ ] Not done: e-mail not tested against a real SMTP server; no scheduler inside the app (use cron); no user accounts (saved areas are shared by everyone using this server)
 
+## Reported fires and image downloads
+
+- [x] NIFC reported fires: `/api/reported`, `/api/reported/monthly`; Explore card, map layer (size by acres), Calendar chart vs satellite cell-days. Checked: California Sep 2020 → 1,045 wildfires, 981,333 acres, largest Creek, Slater, August Complex.
+- [x] PNG downloads for the calendar and charts (footer with area, date, source)
+- [ ] PNG downloads not yet tested in a visible browser (the hidden preview pane pauses rendering)
+
 ## Next: Phase 6 (deploy, README, demo recording)

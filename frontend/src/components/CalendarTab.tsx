@@ -1,10 +1,13 @@
 import { keepPreviousData, useQuery } from '@tanstack/react-query'
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { describeAoi, withAoi, type Aoi } from '../lib/aoi'
 import { getJson } from '../lib/api'
 import type { SeqRamp } from '../lib/color'
 import type { CalendarResponse, ClimatologyResponse } from '../types/api'
+import AllPanelsPdf from './AllPanelsPdf'
 import CalendarHeatmap, { type CalView } from './CalendarHeatmap'
+import ImageDownload from './ImageDownload'
+import ReportedChart from './ReportedChart'
 import SummaryPanel from './SummaryPanel'
 import YearChart from './YearChart'
 
@@ -17,6 +20,9 @@ export default function CalendarTab({ aoi }: { aoi: Aoi }) {
   const [showValues, setShowValues] = useState(true)
   const [baseline, setBaseline] = useState<[number, number] | null>(null) // null = server default
   const [year, setYear] = useState<number | null>(null)
+  const calRef = useRef<HTMLElement>(null)
+  const yrRef = useRef<HTMLElement>(null)
+  const tabRef = useRef<HTMLDivElement>(null)
 
   const bq = baseline ? `baseline_start=${baseline[0]}&baseline_end=${baseline[1]}` : ''
   const cal = useQuery({
@@ -43,14 +49,17 @@ export default function CalendarTab({ aoi }: { aoi: Aoi }) {
   const anomalies = selRow?.months.filter((m) => m?.anomaly).length ?? 0
 
   return (
-    <div className="space-y-6">
-      <section aria-labelledby="cal-h" className="rounded-lg bg-slate-900/70 p-4">
+    <div ref={tabRef} className="space-y-6">
+      <div data-noexport className="flex justify-end">
+        <AllPanelsPdf container={tabRef} fileName={`firewatch360-calendar-report${selYear ? `-${selYear}` : ''}`} area={describeAoi(aoi)} />
+      </div>
+      <section ref={calRef} aria-labelledby="cal-h" className="rounded-lg bg-slate-900/70 p-4">
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div>
             <h2 id="cal-h" className="text-lg font-medium">Burning activity calendar</h2>
             <p className="text-sm text-slate-400">{describeAoi(aoi)} · harmonized monthly fire cell-days (VIIRS-equivalent) · UTC months</p>
           </div>
-          <div className="flex flex-wrap items-end gap-3 text-sm">
+          <div data-noexport className="flex flex-wrap items-end gap-3 text-sm">
             <div role="radiogroup" aria-label="Colour by" className="flex overflow-hidden rounded border border-slate-600">
               {(['counts', 'anomaly'] as const).map((v) => (
                 <button key={v} role="radio" aria-checked={view === v} onClick={() => setView(v)}
@@ -83,6 +92,7 @@ export default function CalendarTab({ aoi }: { aoi: Aoi }) {
             <a className="rounded border border-slate-500 px-3 py-1 hover:bg-slate-800" download href={withAoi('/api/export/calendar.csv', aoi, bq)}>
               Download CSV
             </a>
+            <ImageDownload target={calRef} fileName={`firewatch360-calendar-${view}`} caption={`Burning activity calendar (${view === 'counts' ? 'counts' : 'anomaly z'}) · ${describeAoi(aoi)}`} />
           </div>
         </div>
 
@@ -117,12 +127,13 @@ export default function CalendarTab({ aoi }: { aoi: Aoi }) {
         )}
       </section>
 
-      <section aria-labelledby="yr-h" className="rounded-lg bg-slate-900/70 p-4">
+      <section ref={yrRef} aria-labelledby="yr-h" className="rounded-lg bg-slate-900/70 p-4">
         <div className="flex flex-wrap items-end justify-between gap-2">
           <div>
             <h2 id="yr-h" className="text-lg font-medium">{selYear ?? '—'} vs the baseline</h2>
             <p className="text-sm text-slate-400">Pick a year in the calendar. Ringed points are anomalous months.</p>
           </div>
+          <ImageDownload target={yrRef} fileName={`firewatch360-year-${selYear ?? ''}`} caption={`${selYear ?? ''} vs baseline · ${describeAoi(aoi)}`} />
           {selRow && (
             <p className="text-sm tabular-nums text-slate-300">
               Total {n0(selRow.total)}{selRow.complete ? '' : ' (partial year)'} · {anomalies} anomalous month{anomalies === 1 ? '' : 's'}
@@ -137,6 +148,7 @@ export default function CalendarTab({ aoi }: { aoi: Aoi }) {
         )}
       </section>
 
+      <ReportedChart aoi={aoi} />
       <SummaryPanel aoi={aoi} extra={bq} />
     </div>
   )

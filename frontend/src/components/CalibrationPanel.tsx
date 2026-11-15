@@ -1,6 +1,8 @@
 import { useQuery } from '@tanstack/react-query'
+import { useRef } from 'react'
 import { CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
-import { aoiQuery, type Aoi } from '../lib/aoi'
+import { aoiQuery, describeAoi, type Aoi } from '../lib/aoi'
+import ImageDownload from './ImageDownload'
 import { getJson } from '../lib/api'
 import type { CalibrationResponse } from '../types/api'
 
@@ -16,10 +18,14 @@ export default function CalibrationPanel({ aoi }: { aoi: Aoi }) {
     queryFn: () => getJson<CalibrationResponse>(`/api/calibration${qs}`),
   })
   const cal = data?.calibration
+  const ref = useRef<HTMLElement>(null)
 
   return (
-    <section aria-labelledby="cal-h" className="mt-8 max-w-5xl rounded-lg bg-slate-900/70 p-4">
-      <h2 id="cal-h" className="text-lg font-medium">MODIS → VIIRS harmonization</h2>
+    <section ref={ref} aria-labelledby="cal-h" className="mt-8 max-w-5xl rounded-lg bg-slate-900/70 p-4">
+      <div className="flex items-start justify-between gap-2">
+        <h2 id="cal-h" className="text-lg font-medium">MODIS → VIIRS harmonization</h2>
+        <ImageDownload target={ref} fileName="firewatch360-harmonization" caption={`MODIS → VIIRS harmonization · ${describeAoi(aoi)}`} />
+      </div>
       <p className="text-sm text-slate-400">
         Monthly unique fire cell-days (0.01° grid, vegetation fires, nominal+high confidence). Fit: VIIRS ≈ k × MODIS on the overlap period.
       </p>

@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
-import { useState } from 'react'
-import { aoiQuery, type Aoi } from '../lib/aoi'
+import { useRef, useState } from 'react'
+import { aoiQuery, describeAoi, type Aoi } from '../lib/aoi'
+import ImageDownload from './ImageDownload'
 import { getJson, todayUtc, notFuture } from '../lib/api'
 import type { AnomaliesResponse } from '../types/api'
 import CurrentCard from './CurrentCard'
@@ -15,13 +16,17 @@ export default function SummaryPanel({ aoi, extra = '' }: { aoi: Aoi; extra?: st
     queryKey: ['anomalies', q],
     queryFn: () => getJson<AnomaliesResponse>(`/api/anomalies?${q}`),
   })
+  const ref = useRef<HTMLElement>(null)
   const [start, setStart] = useState('2025-07-01')
   const [end, setEnd] = useState('2025-07-31')
   const hotspotsUrl = `/api/export/hotspots.csv?${aoiQs}${aoiQs ? '&' : ''}start=${start}&end=${end}`
 
   return (
-    <section aria-labelledby="sum-h" className="mt-8 max-w-5xl rounded-lg bg-slate-900/70 p-4">
-      <h2 id="sum-h" className="text-lg font-medium">Historical comparison</h2>
+    <section ref={ref} aria-labelledby="sum-h" className="mt-8 max-w-5xl rounded-lg bg-slate-900/70 p-4">
+      <div className="flex items-start justify-between gap-2">
+        <h2 id="sum-h" className="text-lg font-medium">Historical comparison</h2>
+        <ImageDownload target={ref} fileName="firewatch360-historical-comparison" caption={`Historical comparison · ${describeAoi(aoi)}`} />
+      </div>
       <p className="text-sm text-slate-400">Harmonized monthly fire cell-days, compared with the baseline median for the same calendar month.</p>
       {isFetching && <p className="mt-2 text-sm text-slate-400" role="status">Computing…</p>}
       {error && <p className="mt-3 text-red-300" role="alert">Could not load analytics: {(error as Error).message}</p>}
@@ -65,7 +70,7 @@ export default function SummaryPanel({ aoi, extra = '' }: { aoi: Aoi; extra?: st
         </>
       )}
 
-      <div className="mt-4 flex flex-wrap items-end gap-3 border-t border-slate-700 pt-4 text-sm">
+      <div data-noexport className="mt-4 flex flex-wrap items-end gap-3 border-t border-slate-700 pt-4 text-sm">
         <a className="rounded border border-slate-500 px-3 py-1 hover:bg-slate-800" href={`/api/export/calendar.csv?${q}`} download>
           Download calendar CSV
         </a>

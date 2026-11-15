@@ -2,7 +2,7 @@ import { keepPreviousData, useQueries, useQuery } from '@tanstack/react-query'
 import { useEffect, useState, type FormEvent } from 'react'
 import { describeAoi, PRESETS, REGION, withAoi, type Aoi } from '../lib/aoi'
 import { getJson, todayUtc, notFuture } from '../lib/api'
-import type { AnomaliesResponse, HotspotsResponse, ImpactResponse, NrtResponse } from '../types/api'
+import type { AnomaliesResponse, HotspotsResponse, ImpactResponse, NrtResponse, ReportedResponse } from '../types/api'
 import CurrentCard from './CurrentCard'
 import ContextCard from './ContextCard'
 import FireRiskBrief from './FireRiskBrief'
@@ -60,7 +60,13 @@ export default function ExploreTab({ aoi, setAoi }: Props) {
     placeholderData: keepPreviousData,
     staleTime: Infinity,
   })
-  const vectorIds = OVERLAYS.filter((o) => o.kind === 'vector' && overlays[o.id]).map((o) => o.id as VectorOverlay)
+  const reportedQ = useQuery({
+    queryKey: ['reported', aoi, start, end],
+    queryFn: () => getJson<ReportedResponse>(withAoi('/api/reported', aoi, `start=${start}&end=${end}`)),
+    enabled: start <= end,
+    staleTime: 30 * 60_000,
+  })
+  const vectorIds = OVERLAYS.filter((o) => o.kind === 'vector' && overlays[o.id] && o.id !== 'reported').map((o) => o.id as VectorOverlay)
   const featQs = useQueries({
     queries: vectorIds.map((id) => ({
       queryKey: ['impact-features', id, aoi],
@@ -143,7 +149,7 @@ export default function ExploreTab({ aoi, setAoi }: Props) {
           <div className="space-y-1">
             {OVERLAYS.map((o) => (
               <label key={o.id} className="flex items-center gap-1.5" title={o.note}>
-                <input type="checkbox" checked={!!overlays[o.id]} disabled={!hasAoi && o.kind !== 'raster'}
+                <input type="checkbox" checked={!!overlays[o.id]} disabled={!hasAoi && o.kind !== 'raster' && o.id !== 'reported'}
                        onChange={(e) => setOverlays({ ...overlays, [o.id]: e.target.checked })} />
                 <span className="inline-block h-2.5 w-2.5 shrink-0 rounded-sm" style={{ background: o.color }} aria-hidden="true" />
                 {o.label}
@@ -179,7 +185,7 @@ export default function ExploreTab({ aoi, setAoi }: Props) {
       </aside>
 
       <div className="min-w-0 space-y-3">
-        <div className="grid gap-2 sm:grid-cols-3">
+        <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
           <Card title={`Hotspots ${start} → ${end}`}>
             {hs.isError ? <p className="text-red-300">{(hs.error as Error).message}</p> : hs.data ? (
               <>
@@ -192,13 +198,24 @@ export default function ExploreTab({ aoi, setAoi }: Props) {
               </>
             ) : <p className="text-slate-400">{hs.isFetching ? 'Loading…' : '—'}</p>}
           </Card>
+          <Card title={`Reported fires (NIFC) ${start} → ${end}`}>
+            {reportedQ.data?.status === 'ok' ? (
+              <>
+                <p className="text-2xl tabular-nums">{n0(reportedQ.data.wildfires!)} <span className="text-base text-slate-400">wildfires</span></p>
+                <p className="text-xs text-slate-400">{n0(reportedQ.data.wildfire_acres!)} acres · {n0(reportedQ.data.prescribed!)} prescribed burns</p>
+                {reportedQ.data.largest?.[0] && <p className="truncate text-xs text-slate-400" title={reportedQ.data.largest.slice(0, 5).map((f) => `${f.name} (${n0(f.acres ?? 0)} ac)`).join(', ')}>
+                  Largest: {reportedQ.data.largest.slice(0, 3).map((f) => f.name).join(', ')}</p>}
+                {reportedQ.data.note && <p className="text-xs text-amber-300">{reportedQ.data.note}</p>}
+              </>
+            ) : <p className="text-sm text-slate-400">{reportedQ.isFetching ? 'Loading…' : reportedQ.data?.message ?? (reportedQ.isError ? 'Unavailable' : '—')}</p>}
+          </Card>
           <Card title="Peak month on record (harmonized)">
             {peak ? <><p className="text-2xl tabular-nums">{peak.month}</p><p className="text-xs text-slate-400">{n0(peak.harmonized)} fire cell-days</p></> : <p className="text-slate-400">{an.isError ? 'Unavailable' : 'Loading…'}</p>}
           </Card>
           <CurrentCard data={an.data} loading={an.isLoading} error={an.isError} />
         </div>
         <MapView aoi={aoi} onAoi={setAoi} mode={mode} onModeDone={() => setMode('none')} circleKm={circleKm} hotspots={hs.data} liveData={showLive ? liveQ.data : undefined}
-          overlays={overlays} impactGeo={hasAoi ? impactGeo : {}} fireZone={hasAoi ? impactQ.data?.fire?.zone_geojson : null} />
+          overlays={overlays} impactGeo={{ ...(hasAoi ? impactGeo : {}), reported: overlays.reported ? reportedQ.data?.geojson : undefined }} fireZone={hasAoi ? impactQ.data?.fire?.zone_geojson : null} />
         <div>
           <div role="tablist" aria-label="Area details" className="flex gap-4 border-b border-slate-800 text-sm">
             {([['brief', 'Fire Risk Brief'], ['impact', 'What could this affect?'], ['context', 'Drought & weather']] as const).map(([id, label]) => (

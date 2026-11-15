@@ -1,9 +1,10 @@
 import { useQuery } from '@tanstack/react-query'
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { describeAoi, PRESETS, withAoi, type Aoi } from '../lib/aoi'
 import { getJson } from '../lib/api'
 import type { ClimatologyResponse } from '../types/api'
+import ImageDownload from './ImageDownload'
 
 // Okabe–Ito pair; lines also differ in dash pattern and the legend names them.
 const COLOR_A = '#E69F00'
@@ -46,6 +47,7 @@ export default function CompareTab({ aoi }: { aoi: Aoi }) {
   const [yearB, setYearB] = useState(2020)
   const [presetB, setPresetB] = useState(aoi.kind === 'region' ? 1 : 0)
   const [scale, setScale] = useState<'value' | 'pct'>('value')
+  const exportRef = useRef<HTMLDivElement>(null)
 
   const a: Side = { label: mode === 'years' ? `${yearA}` : `${describeAoi(aoi)} ${yearA}`, aoi, year: yearA }
   const b: Side = mode === 'years'
@@ -108,6 +110,11 @@ export default function CompareTab({ aoi }: { aoi: Aoi }) {
       </p>
       {err && <p className="text-sm text-red-300">{(err as Error).message}</p>}
 
+      <div ref={exportRef} className="space-y-3">
+      <div className="flex items-baseline justify-between gap-2">
+        <p className="text-sm font-medium">{a.label} vs {b.label}{mode === 'years' ? ` · ${describeAoi(aoi)}` : ''} · {scale === 'pct' ? '% vs own median' : 'fire cell-days'}</p>
+        <ImageDownload target={exportRef} fileName={`firewatch360-compare-${a.year}-${b.year}`} caption={`Compare ${a.label} vs ${b.label}`} />
+      </div>
       <div className="h-80 rounded border border-slate-800 p-2">
         <ResponsiveContainer width="100%" height="100%">
           <LineChart data={data} margin={{ top: 8, right: 16, left: 8, bottom: 0 }}>
@@ -145,6 +152,7 @@ export default function CompareTab({ aoi }: { aoi: Aoi }) {
           ))}
         </tbody>
       </table>
+      </div>
       {(sa?.provisional || sb?.provisional) && <p className="text-xs text-slate-500">* includes provisional near-real-time months.</p>}
     </div>
   )

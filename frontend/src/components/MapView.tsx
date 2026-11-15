@@ -126,14 +126,17 @@ export default function MapView({ aoi, onAoi, mode, onModeDone, circleKm, hotspo
       for (const o of OVERLAYS.filter((x) => x.kind === 'vector' && x.glyph)) {
         map.addSource(`ov-${o.id}`, { type: 'geojson', data: EMPTY })
         map.addLayer({ id: `ov-${o.id}`, type: 'circle', source: `ov-${o.id}`, layout: { visibility: 'none' },
-          paint: { 'circle-color': o.color, 'circle-radius': ['interpolate', ['linear'], ['zoom'], 4, 4, 10, 8], 'circle-stroke-color': '#0b0f14', 'circle-stroke-width': 1 } })
+          paint: { 'circle-color': o.color, 'circle-stroke-color': '#0b0f14', 'circle-stroke-width': 1,
+                   'circle-radius': o.id === 'reported'
+                     ? ['interpolate', ['linear'], ['sqrt', ['max', ['coalesce', ['get', 'acres'], 0], 0]], 0, 4, 100, 6, 1000, 14]
+                     : ['interpolate', ['linear'], ['zoom'], 4, 4, 10, 8] } })
         map.addLayer({ id: `ov-${o.id}-label`, type: 'symbol', source: `ov-${o.id}`, layout: { visibility: 'none', 'text-field': o.glyph!,
           'text-size': ['interpolate', ['linear'], ['zoom'], 4, 7, 10, 11], 'text-allow-overlap': true, 'text-font': ['Open Sans Bold', 'Noto Sans Bold'] },
           paint: { 'text-color': '#0b0f14' } })
         map.on('click', `ov-${o.id}`, (e: maplibregl.MapLayerMouseEvent) => {
           const p = e.features?.[0]?.properties as Record<string, unknown> | undefined
           if (!p || live.current.mode !== 'none') return
-          const extra = ['city', 'state', 'type', 'beds', 'size', 'iata', 'pop_max'].filter((k) => p[k] != null && p[k] !== '' && p[k] !== 'null')
+          const extra = ['date', 'acres', 'cause', 'county', 'city', 'state', 'type', 'beds', 'size', 'iata', 'pop_max'].filter((k) => p[k] != null && p[k] !== '' && p[k] !== 'null')
             .map((k) => `${k === 'pop_max' ? 'population (est.)' : k}: ${typeof p[k] === 'number' ? (p[k] as number).toLocaleString() : p[k]}`).join('<br/>')
           new maplibregl.Popup().setLngLat(e.lngLat).setHTML(`<div style="color:#0f172a;font:12px system-ui"><b>${o.label.replace(/s$/, '')}</b>: ${String(p.name ?? '')}<br/>${extra}</div>`).addTo(map)
         })
@@ -254,7 +257,7 @@ export default function MapView({ aoi, onAoi, mode, onModeDone, circleKm, hotspo
   useEffect(() => {
     const map = mapRef.current
     if (!map || !ready) return
-    for (const id of ['places', 'roads', 'hospitals', 'schools', 'firestations', 'airports'] as VectorOverlay[]) {
+    for (const id of ['places', 'roads', 'hospitals', 'schools', 'firestations', 'airports', 'reported'] as VectorOverlay[]) {
       ;(map.getSource(`ov-${id}`) as GeoJSONSource | undefined)?.setData((impactGeo[id] as FC) ?? EMPTY)
     }
     const zone = fireZone ? ({ type: 'FeatureCollection', features: [{ type: 'Feature', properties: {}, geometry: fireZone }] } as unknown as FC) : EMPTY

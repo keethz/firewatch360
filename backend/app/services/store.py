@@ -33,24 +33,27 @@ class HotspotStore:
 
     @contextmanager
     def _session(self, aoi: AOI | None):
-        """Hold the connection lock; when `aoi` is a polygon, expose `in_aoi(lat, lon)`."""
+        """A fresh cursor per query (no result state can leak between requests); when `aoi` is a
+        polygon, the cursor gets an `in_aoi(lat, lon)` function."""
         with self._lock:
+            cur = self._con.cursor()
             registered = False
-            if aoi is not None and aoi.kind == "polygon":
-                geom = aoi.geometry
-
-                def in_aoi(lat: pa.Array, lon: pa.Array) -> pa.Array:
-                    return pa.array(shapely.contains_xy(geom, lon.to_numpy(), lat.to_numpy()))
-
-                self._con.create_function(
-                    "in_aoi", in_aoi, [duckdb.sqltype("DOUBLE")] * 2, duckdb.sqltype("BOOLEAN"), type="arrow"
-                )
-                registered = True
             try:
-                yield self._con
+                if aoi is not None and aoi.kind == "polygon":
+                    geom = aoi.geometry
+
+                    def in_aoi(lat: pa.Array, lon: pa.Array) -> pa.Array:
+                        return pa.array(shapely.contains_xy(geom, lon.to_numpy(), lat.to_numpy()))
+
+                    cur.create_function(
+                        "in_aoi", in_aoi, [duckdb.sqltype("DOUBLE")] * 2, duckdb.sqltype("BOOLEAN"), type="arrow"
+                    )
+                    registered = True
+                yield cur
             finally:
                 if registered:
-                    self._con.remove_function("in_aoi")
+                    cur.remove_function("in_aoi")  # functions are shared by all cursors of the connection
+                cur.close()
 
     def query(self, sql: str, params: list | None = None, aoi: AOI | None = None) -> list[dict]:
         with self._session(aoi) as con:
@@ -62,8 +65,8 @@ class HotspotStore:
         """Write a query result to a CSV file with DuckDB COPY. Returns the row count."""
         safe = path.replace("'", "''")
         with self._session(aoi) as con:
-            con.execute(f"COPY ({sql}) TO '{safe}' (HEADER, DELIMITER ',')", params)
-            return con.execute(f"SELECT count(*) FROM read_csv('{safe}', header=true)").fetchone()[0]
+            con.execute(f"COPY ({sql}) TO '{safe}' (HEADER, DELIMITER ',')", params).fetchall()
+            return con.execute(f"SELECT count(*) FROM read_csv('{safe}', header=true)").fetchall()[0][0]
 
     def coverage(self) -> dict:
         return json.loads(Path(self.settings.coverage_path).read_text())

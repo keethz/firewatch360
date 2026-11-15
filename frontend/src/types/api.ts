@@ -340,3 +340,28 @@ export interface AlertEvent {
   created_utc: string
   delivery?: Record<string, string | boolean>
 }
+
+export interface ReportedFire { name: string; date: string | null; acres: number | null; cause: string | null; state: string; county: string | null }
+export interface ReportedResponse {
+  status: 'ok' | 'unavailable' | 'outside_coverage'
+  message?: string
+  note?: string
+  source: string
+  window?: [string, string]
+  wildfires?: number
+  wildfire_acres?: number
+  prescribed?: number
+  causes?: Record<string, number>
+  largest?: ReportedFire[]
+  geojson?: unknown
+  points_shown?: number
+  points_capped?: boolean
+}
+export interface ReportedMonthly {
+  status: 'ok' | 'unavailable'
+  message?: string
+  source: string
+  coverage_start: string
+  note: string
+  months: { month: string; wildfires: number; acres: number; satellite_cell_days: number | null; provisional: boolean | null }[]
+}

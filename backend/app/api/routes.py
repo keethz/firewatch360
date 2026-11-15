@@ -226,9 +226,19 @@ def export_hotspots(
     filt = f"{where} AND acq_date BETWEEN ? AND ? AND sensor IN ({','.join('?' * len(sens))})"
     params = [*params, start, end, *sens]
     n = store.query(f"SELECT count(*) AS n FROM hotspots WHERE {filt}", params, aoi=aoi)[0]["n"]
+    disp = {"Content-Disposition": 'attachment; filename="firewatch360_hotspots.csv"', "X-Row-Count": str(n)}
     if n > MAX_EXPORT_ROWS:
-        raise HTTPException(413, f"{n:,} hotspots match; narrow the area or dates (limit {MAX_EXPORT_ROWS:,}).")
-    cols = ("sensor, processing_level, latitude, longitude, acq_date, acq_time_raw AS acq_time_utc, "
+        # A downloaded file must explain itself, so the error is written as CSV comment text.
+        return Response(f"# {n:,} hotspots match; this is over the export limit of {MAX_EXPORT_ROWS:,} rows.\n"
+                        "# Narrow the area or the dates and download again.\n", status_code=413,
+                        media_type="text/csv", headers=disp)
+    if n == 0:
+        why = " VIIRS data start on 2012-01-19." if sens == ["VIIRS"] and start < date(2012, 1, 19) else ""
+        return Response(f"# No hotspots match this area, dates ({start} to {end}) and sensors ({','.join(sens)}).{why}\n"
+                        + "sensor,processing_level,latitude,longitude,acq_date,acq_time_utc,acq_datetime_utc,satellite,"
+                          "instrument,confidence_raw,confidence_norm,frp,daynight,type,brightness_k,brightness_2_k,scan,track,version\n",
+                        media_type="text/csv", headers=disp)
+    cols = ("sensor, processing_level, latitude, longitude, acq_date, lpad(CAST(acq_time_raw AS VARCHAR), 4, '0') AS acq_time_utc, "
             "acq_datetime_utc, satellite, instrument, confidence_raw, confidence_norm, frp, daynight, type, "
             "brightness_k, brightness_2_k, scan, track, version")
     fd, path = tempfile.mkstemp(suffix=".csv", prefix="fw360_")
@@ -809,3 +819,65 @@ def run_check(request: Request, area_id: str | None = None) -> dict:
 @router.get("/alerts/events")
 def list_events(request: Request, area_id: str | None = None, limit: int = Query(100, ge=1, le=1000)) -> dict:
     return {"events": request.app.state.alerts.events(area_id)[:limit]}
+
+
+# ---------------------------------------------------------------- Reported fires (NIFC)
+
+import hashlib  # noqa: E402
+
+from app.services import reported as rep  # noqa: E402
+
+
+def _reported_geom(aoi: AOI):
+    """None = whole region (all US incidents); otherwise the area, simplified for the request."""
+    if aoi.kind == "region":
+        return None, "region"
+    g = imp.make_geo(aoi).geom
+    if aoi.kind != "bbox":
+        g = g.simplify(0.002)
+    return g, hashlib.sha1(aoi.key.encode() if isinstance(aoi.key, str) else repr(aoi.key).encode()).hexdigest()[:16]
+
+
+@router.get("/reported")
+def reported(request: Request, aoi: AOI = Depends(aoi_param),
+             start: date = Query(..., description="first UTC discovery date"),
+             end: date = Query(..., description="last UTC discovery date"),
+             points: int = Query(1000, ge=0, le=2000)) -> dict:
+    """Agency-reported fire incidents (NIFC WFIGS) discovered in the area and dates."""
+    if start > end:
+        raise HTTPException(422, "start must be <= end")
+    geom, key = _reported_geom(aoi)
+    try:
+        return request.app.state.reported.summary(geom, key, start, end, points=points)
+    except rep.ReportedError as exc:
+        return {"status": "unavailable", "message": str(exc), "source": rep.SOURCE}
+
+
+@router.get("/reported/monthly")
+def reported_monthly(request: Request, aoi: AOI = Depends(aoi_param),
+                     start: str = Query("2014-01", description="first month YYYY-MM"),
+                     end: str | None = Query(None, description="last month YYYY-MM (default: this month)")) -> dict:
+    """Reported wildfires per month (NIFC, 2014 onward) with the harmonized satellite series alongside."""
+    for v in (start, end):
+        if v is not None and not MONTH_RE.match(v):
+            raise HTTPException(422, "months must be YYYY-MM")
+    cli: rep.ReportedClient = request.app.state.reported
+    last = date.fromisoformat(f"{end}-01") if end else cli.today().replace(day=1)
+    first = date.fromisoformat(f"{start}-01")
+    if first > last:
+        raise HTTPException(422, "start must be <= end")
+    geom, key = _reported_geom(aoi)
+    try:
+        rows = cli.monthly(geom, key, first, last)
+    except rep.ReportedError as exc:
+        return {"status": "unavailable", "message": str(exc), "source": rep.SOURCE, "months": []}
+    sat = {}
+    try:
+        for r in request.app.state.harmonizer.harmonized(aoi, HarmonizationParams())["series"]:
+            sat[r["month"]] = {"satellite_cell_days": round(r["harmonized"], 1), "provisional": r.get("provisional", False)}
+    except (ValueError, HTTPException):
+        pass
+    months = [{**r, **sat.get(r["month"], {"satellite_cell_days": None, "provisional": None})} for r in rows]
+    return {"status": "ok", "source": rep.SOURCE, "coverage_start": rep.COVERAGE_START.isoformat()[:7], "months": months,
+            "note": "Reported incidents by discovery month vs harmonized satellite fire cell-days. One large fire is one "
+                    "incident but many satellite detections; small fires may be reported but not detected."}

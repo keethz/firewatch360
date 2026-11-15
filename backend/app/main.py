@@ -7,6 +7,7 @@ from app.services.harmonize import Harmonizer
 from app.services.explain import Explainer
 from app.services.context import ContextClient
 from app.services.alerts import AlertStore
+from app.services.reported import ReportedClient
 from app.services.impact import LiveCache, StaticLayers
 from app.services.nrt import NrtClient
 from app.services.store import HotspotStore
@@ -24,6 +25,7 @@ def create_app() -> FastAPI:
                                     fallback_model=settings.gemini_fallback_model)
     app.state.context = ContextClient(settings.data_dir / "cache" / "context")
     app.state.alerts = AlertStore(settings.data_dir / "alerts")
+    app.state.reported = ReportedClient(settings.data_dir / "cache" / "reported")
     app.state.nrt = NrtClient(settings.firms_map_key, settings.data_dir / "cache" / "nrt")
     app.add_middleware(
         CORSMiddleware,

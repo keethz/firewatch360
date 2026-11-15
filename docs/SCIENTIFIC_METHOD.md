@@ -180,3 +180,11 @@ Checks against known events (default 5 km):
 - Each event has a key (rule + month, latest detection date, or warning onset), so the same alert is stored and sent once.
 - Delivery: in-app inbox; optional webhook (JSON with a ready `text` field, https only) and e-mail via the server's SMTP settings.
 - Limits: NRT detections are not filtered for industrial sources; a prototype store for one server, not a multi-user notification service.
+
+## Reported fires (NIFC)
+
+- **Source.** NIFC WFIGS Incident Locations (IRWIN), queried live with ArcGIS statistics. One record per reported incident, with point of origin, discovery time, size, cause and name. Wildfires (`WF`) and prescribed fires (`RX`) are counted separately.
+- **Coverage.** 2014 onward; earlier years are almost empty, so the app reports "outside coverage" before 2014.
+- **Filtering.** Discovery date (UTC) within the window; point of origin inside the area. The whole-region view counts all US incidents.
+- **Comparison with satellites.** The monthly chart shows reported wildfires next to harmonized satellite fire cell-days on separate axes. They measure different things: one large fire is one incident but thousands of cell-days, and many small reported fires are never detected from orbit. Compare timing and shape, not size.
+- **Caching.** Periods older than 60 days are cached on disk permanently; recent ones refresh hourly.
