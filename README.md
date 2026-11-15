@@ -12,7 +12,8 @@ FIREWATCH 360 merges NASA FIRMS active-fire detections from **MODIS** (2000 onwa
 - CSV downloads
 
 > Prototype. It is not an official NASA product, not an operational emergency tool, and not a forecast.
-
+Product video :https://drive.google.com/file/d/1qOI8aaCzQMlRWnOaeEq67PMFBVPjzElU/view?usp=drive_link
+> Product demo : https://drive.google.com/file/d/1xLKXJUUEI0fGN2NJK_-zS1R-iwL0HSBz/view?usp=sharing
 ## Features
 
 - **Explore**
