@@ -8,7 +8,7 @@ const pct = (v: number | null) => (v == null ? '' : `${v > 0 ? '+' : ''}${v.toFi
 export default function CurrentCard({ data, loading, error }: { data?: AnomaliesResponse; loading: boolean; error: boolean }) {
   const cur = data?.current_month
   const latest = data?.latest_vs_median
-  const box = 'min-w-0 rounded-lg border border-slate-700 bg-slate-900/60 p-3'
+  const box = 'min-w-0 rounded-lg bg-slate-900/70 px-3 py-2'
   if (!data) return <div className={box}><h3 className="text-xs text-slate-400">Current month vs median</h3><p className="text-slate-400">{error ? 'Unavailable' : loading ? 'Loading…' : '—'}</p></div>
 
   if (cur) {

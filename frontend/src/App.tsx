@@ -9,11 +9,11 @@ import { REGION, type Aoi } from './lib/aoi'
 
 const TABS = [
   { id: 'explore', label: 'Explore' },
-  { id: 'history', label: 'Calendar' },
   { id: 'anomalies', label: 'Anomaly map' },
+  { id: 'history', label: 'Calendar' },
   { id: 'compare', label: 'Compare' },
   { id: 'alerts', label: 'Alerts' },
-  { id: 'method', label: 'Method & data' },
+  { id: 'method', label: 'Method' },
 ] as const
 type Tab = (typeof TABS)[number]['id']
 
@@ -22,13 +22,13 @@ export default function App() {
   const [tab, setTab] = useState<Tab>('explore')
 
   return (
-    <div className="min-h-screen p-4 sm:p-6">
-      <header className="mb-4 flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">FIREWATCH 360</h1>
-          <p className="text-sm text-slate-400">Harmonized burning-activity calendar from NASA FIRMS MODIS and VIIRS hotspots</p>
+    <div className="min-h-screen px-4 pb-6 sm:px-6">
+      <header className="mb-4 flex flex-wrap items-center gap-x-8 gap-y-1 border-b border-slate-800">
+        <div className="py-3">
+          <h1 className="text-lg font-semibold tracking-tight"><span className="text-orange-500" aria-hidden="true">◆ </span>FIREWATCH 360</h1>
+          <p className="hidden text-xs text-slate-500 md:block">US wildfire activity from NASA MODIS + VIIRS, 2000 → today</p>
         </div>
-        <nav role="tablist" aria-label="Views" className="flex flex-wrap gap-1">
+        <nav role="tablist" aria-label="Views" className="-mb-px flex max-w-full gap-5 self-end overflow-x-auto text-sm">
           {TABS.map((t) => (
             <button
               key={t.id}
@@ -46,7 +46,7 @@ export default function App() {
                 setTab(t2)
                 document.getElementById(`tab-${t2}`)?.focus()
               }}
-              className={`rounded px-3 py-1.5 text-sm ${tab === t.id ? 'bg-orange-600 font-medium' : 'border border-slate-700 hover:bg-slate-800'}`}
+              className={`shrink-0 whitespace-nowrap border-b-2 pb-3 pt-1 ${tab === t.id ? 'border-orange-500 font-medium text-slate-100' : 'border-transparent text-slate-400 hover:text-slate-200'}`}
             >
               {t.label}
             </button>

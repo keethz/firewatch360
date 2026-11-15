@@ -26,7 +26,7 @@ function headline(d: ImpactResponse): string {
 }
 
 export default function ImpactPanel({ data, loading, error, bufferKm }: { data?: ImpactResponse; loading: boolean; error?: Error | null; bufferKm: number }) {
-  const box = 'rounded-lg border border-slate-700 bg-slate-900/60 p-4'
+  const box = 'rounded-lg bg-slate-900/70 p-4'
   if (error) return <section className={box} role="alert"><h2 className="text-lg font-medium">What could this affect?</h2><p className="mt-1 text-red-300">{error.message}</p></section>
   if (!data) return <section className={box}><h2 className="text-lg font-medium">What could this affect?</h2><p className="mt-1 text-slate-400" role="status">{loading ? 'Checking population, infrastructure and land around the fire detections… (first query for a large area can take up to a minute)' : '—'}</p></section>
   if (data.status === 'aoi_required') return <section className={box}><h2 className="text-lg font-medium">What could this affect?</h2><p className="mt-1 text-slate-300">{data.message}</p></section>

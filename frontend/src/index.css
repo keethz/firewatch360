@@ -2,3 +2,10 @@
 
 :root { color-scheme: dark; }
 body { background: #0b0f14; color: #e6edf3; }
+
+/* Two overlaid range inputs acting as one two-handle slider (anomaly map legend). */
+.zrange input[type="range"] { position: absolute; inset: 0; width: 100%; margin: 0; background: transparent; pointer-events: none; -webkit-appearance: none; appearance: none; }
+.zrange input[type="range"]::-webkit-slider-thumb { pointer-events: auto; -webkit-appearance: none; width: 14px; height: 14px; border-radius: 9999px; background: #f8fafc; border: 2px solid #f97316; cursor: pointer; }
+.zrange input[type="range"]::-moz-range-thumb { pointer-events: auto; width: 12px; height: 12px; border-radius: 9999px; background: #f8fafc; border: 2px solid #f97316; cursor: pointer; }
+.zrange input[type="range"]:focus-visible::-webkit-slider-thumb { outline: 2px solid #fdba74; outline-offset: 2px; }
+.zrange input[type="range"]::-webkit-slider-runnable-track { background: transparent; }

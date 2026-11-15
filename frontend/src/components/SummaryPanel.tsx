@@ -20,7 +20,7 @@ export default function SummaryPanel({ aoi, extra = '' }: { aoi: Aoi; extra?: st
   const hotspotsUrl = `/api/export/hotspots.csv?${aoiQs}${aoiQs ? '&' : ''}start=${start}&end=${end}`
 
   return (
-    <section aria-labelledby="sum-h" className="mt-8 max-w-5xl rounded-lg border border-slate-700 bg-slate-900/60 p-4">
+    <section aria-labelledby="sum-h" className="mt-8 max-w-5xl rounded-lg bg-slate-900/70 p-4">
       <h2 id="sum-h" className="text-lg font-medium">Historical comparison</h2>
       <p className="text-sm text-slate-400">Harmonized monthly fire cell-days, compared with the baseline median for the same calendar month.</p>
       {isFetching && <p className="mt-2 text-sm text-slate-400" role="status">Computing…</p>}

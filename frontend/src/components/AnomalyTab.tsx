@@ -38,6 +38,9 @@ export default function AnomalyTab({ aoi }: { aoi: Aoi }) {
   const [cellDeg, setCellDeg] = useState(0.25)
   const [z, setZ] = useState(2)
   const [cbAlt, setCbAlt] = useState(false)
+  // Display range on the z-score scale; the ends (±Z_LIMIT) are open-ended.
+  const [zLo, setZLo] = useState(-Z_LIMIT)
+  const [zHi, setZHi] = useState(Z_LIMIT)
   const [picked, setSel] = useState<{ c: AnomalyCell; ctx: string } | null>(null)
   const params = [month && `month=${month}`, `cell_deg=${cellDeg}`, `z_threshold=${z}`].filter(Boolean).join('&')
   const q = useQuery({
@@ -102,6 +105,22 @@ export default function AnomalyTab({ aoi }: { aoi: Aoi }) {
     map.setFilter('cells-sel', ['==', ['get', 'key'], sel ? sel.cell.join(',') : ''])
   }, [sel, ready])
 
+  const inRange = (z: number) => (zLo <= -Z_LIMIT || z >= zLo) && (zHi >= Z_LIMIT || z <= zHi)
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map || !ready) return
+    const conds: unknown[] = []
+    if (zLo > -Z_LIMIT) conds.push(['>=', ['get', 'z'], zLo])
+    if (zHi < Z_LIMIT) conds.push(['<=', ['get', 'z'], zHi])
+    const range = conds.length ? ['all', ...conds] : null
+    map.setFilter('cells-fill', range as maplibregl.FilterSpecification | null)
+    map.setFilter('cells-anom', (range ? ['all', ['==', ['get', 'anomaly'], true], ...conds] : ['==', ['get', 'anomaly'], true]) as maplibregl.FilterSpecification)
+  }, [zLo, zHi, ready])
+  const shown = d ? d.geojson.features.filter((f) => inRange(f.properties.z)).length : 0
+  const zLabel = (v: number, end: 'lo' | 'hi') =>
+    end === 'lo' && v <= -Z_LIMIT ? 'any' : end === 'hi' && v >= Z_LIMIT ? 'any' : `${v > 0 ? '+' : v < 0 ? '−' : ''}${Math.abs(v)}`
+  const preset = (lo: number, hi: number) => { setZLo(lo); setZHi(hi) }
+
   const zoomTo = (c: AnomalyCell) => {
     setSel({ c, ctx })
     const [w, s, e, n] = c.bbox
@@ -139,12 +158,36 @@ export default function AnomalyTab({ aoi }: { aoi: Aoi }) {
         <div className="relative h-[60vh] min-h-[360px] overflow-hidden rounded border border-slate-800">
           <div ref={el} className="h-full w-full" />
           {q.isFetching && <div className="absolute left-2 top-2 rounded bg-slate-900/90 px-2 py-1 text-xs">Computing anomalies…</div>}
-          <div className="absolute bottom-2 left-2 rounded bg-slate-900/90 p-2 text-xs">
-            <div className="mb-1">Robust z-score vs the same month in past years</div>
-            <div className="h-2 w-48 rounded" style={{ background: scale.gradient() }} />
-            <div className="flex w-48 justify-between text-slate-400"><span>−{Z_LIMIT} fewer</span><span>0</span><span>+{Z_LIMIT} more</span></div>
+          <fieldset className="absolute bottom-2 left-2 w-64 rounded bg-slate-900/90 p-2 text-xs">
+            <legend className="sr-only">Show cells by robust z-score</legend>
+            <div className="mb-1 flex justify-between gap-2">
+              <span>Robust z-score vs the same month in past years</span>
+            </div>
+            {/* Colour bar; the part outside the chosen range is dimmed */}
+            <div className="relative h-2.5 rounded" style={{ background: scale.gradient() }}>
+              <div className="absolute inset-y-0 left-0 rounded-l bg-slate-900/80" style={{ width: `${scale.position(zLo) * 100}%` }} />
+              <div className="absolute inset-y-0 right-0 rounded-r bg-slate-900/80" style={{ width: `${(1 - scale.position(zHi)) * 100}%` }} />
+            </div>
+            <div className="zrange relative h-4">
+              <input type="range" min={-Z_LIMIT} max={Z_LIMIT} step={0.5} value={zLo} aria-label="Lowest z-score shown"
+                     onChange={(e) => setZLo(Math.min(+e.target.value, zHi - 0.5))} />
+              <input type="range" min={-Z_LIMIT} max={Z_LIMIT} step={0.5} value={zHi} aria-label="Highest z-score shown"
+                     onChange={(e) => setZHi(Math.max(+e.target.value, zLo + 0.5))} />
+            </div>
+            <div className="flex justify-between text-slate-400"><span>≤ −{Z_LIMIT} fewer</span><span>0</span><span>≥ +{Z_LIMIT} more</span></div>
+            <p className="mt-1 text-slate-200" aria-live="polite">
+              Showing z from <strong>{zLabel(zLo, 'lo')}</strong> to <strong>{zLabel(zHi, 'hi')}</strong>: {n0(shown)} of {n0(d?.n_cells ?? 0)} cells
+            </p>
+            <div className="mt-1 flex flex-wrap gap-1">
+              {([['All', -Z_LIMIT, Z_LIMIT], ['More than usual', 2, Z_LIMIT], ['Fewer than usual', -Z_LIMIT, -2], ['Near normal', -2, 2]] as const).map(([label, lo, hi]) => (
+                <button key={label} type="button" onClick={() => preset(lo, hi)} aria-pressed={zLo === lo && zHi === hi}
+                        className={`rounded border px-1.5 py-0.5 ${zLo === lo && zHi === hi ? 'border-orange-400 bg-orange-600/30' : 'border-slate-600 hover:bg-slate-800'}`}>
+                  {label}
+                </button>
+              ))}
+            </div>
             <div className="mt-1 flex items-center gap-1 text-slate-300"><span className="inline-block h-3 w-3 border border-white" /> flagged unusual</div>
-          </div>
+          </fieldset>
         </div>
         {q.isError && <p className="mt-2 text-sm text-red-300">{(q.error as Error).message}</p>}
         {d && (
@@ -157,7 +200,7 @@ export default function AnomalyTab({ aoi }: { aoi: Aoi }) {
       </section>
 
       <aside className="space-y-4">
-        <section aria-labelledby="sel-h" className="rounded border border-slate-800 p-3">
+        <section aria-labelledby="sel-h" className="rounded-lg bg-slate-900/70 p-3">
           <h3 id="sel-h" className="mb-2 font-semibold">Selected cell</h3>
           {!sel && <p className="text-sm text-slate-400">Click a cell on the map or a row below.</p>}
           {sel && d && (
@@ -178,12 +221,12 @@ export default function AnomalyTab({ aoi }: { aoi: Aoi }) {
           )}
         </section>
 
-        <section aria-labelledby="top-h" className="rounded border border-slate-800 p-3">
+        <section aria-labelledby="top-h" className="rounded-lg bg-slate-900/70 p-3">
           <h3 id="top-h" className="mb-2 font-semibold">Most unusual cells</h3>
           <table className="w-full text-left text-sm">
             <thead className="text-xs text-slate-400"><tr><th className="py-1">Location</th><th>Value</th><th>Median</th><th>z</th></tr></thead>
             <tbody>
-              {d?.top.filter((c) => c.anomaly).slice(0, 10).map((c) => (
+              {d?.top.filter((c) => c.anomaly && inRange(c.z)).slice(0, 10).map((c) => (
                 <tr key={c.cell.join(',')} className={`cursor-pointer border-t border-slate-800 hover:bg-slate-800 ${sel?.cell.join(',') === c.cell.join(',') ? 'bg-slate-800' : ''}`}
                     onClick={() => zoomTo(c)} tabIndex={0} onKeyDown={(e) => e.key === 'Enter' && zoomTo(c)}>
                   <td className="py-1">{((c.bbox[1] + c.bbox[3]) / 2).toFixed(2)}, {((c.bbox[0] + c.bbox[2]) / 2).toFixed(2)}</td>

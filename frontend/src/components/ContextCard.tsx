@@ -38,7 +38,7 @@ export default function ContextCard({ aoi, month, compact = false }: { aoi: Aoi;
   const d = q.data
   const fw = d?.fire_weather
   return (
-    <section aria-labelledby="ctx-h" className={`rounded border border-slate-800 ${compact ? 'p-2' : 'p-3'}`}>
+    <section aria-labelledby="ctx-h" className={`rounded-lg bg-slate-900/70 ${compact ? 'p-2' : 'p-3'}`}>
       <h3 id="ctx-h" className="mb-2 font-semibold">Drought &amp; fire weather</h3>
       {q.isPending && <p className="text-sm text-slate-400">Loading Drought Monitor and NWS data…</p>}
       {q.isError && <p className="text-sm text-red-300">{(q.error as Error).message}</p>}

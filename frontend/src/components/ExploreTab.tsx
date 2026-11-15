@@ -28,6 +28,7 @@ export default function ExploreTab({ aoi, setAoi }: Props) {
   const [showLive, setShowLive] = useState(false)
   const [liveDays, setLiveDays] = useState(3)
   const [bufferKm, setBufferKm] = useState(5)
+  const [panel, setPanel] = useState<'brief' | 'impact' | 'context'>('brief')
   const [overlays, setOverlays] = useState<Partial<Record<OverlayId, boolean>>>({ firezone: true, hospitals: true, schools: true, firestations: true })
 
   useEffect(() => {
@@ -77,11 +78,9 @@ export default function ExploreTab({ aoi, setAoi }: Props) {
   })
 
   return (
-    <div className="grid gap-4 lg:grid-cols-[18rem_1fr]">
-      <aside className="space-y-4 text-sm" aria-label="Map controls">
-        <fieldset className="rounded border border-slate-700 p-3">
-          <legend className="px-1 font-medium">Area of interest</legend>
-          <p className="mb-2 text-slate-300">{describeAoi(aoi)}</p>
+    <div className="grid gap-4 lg:grid-cols-[17rem_1fr]">
+      <aside className="space-y-2 text-sm lg:sticky lg:top-2 lg:max-h-[calc(100vh-1rem)] lg:self-start lg:overflow-y-auto" aria-label="Map controls">
+        <Section title="Area" summary={describeAoi(aoi)} open>
           <label className="flex flex-col">
             <span className="text-slate-400">Preset</span>
             <select
@@ -109,10 +108,9 @@ export default function ExploreTab({ aoi, setAoi }: Props) {
           {aoi.kind !== 'region' && (
             <button className="mt-2 text-xs text-slate-400 underline" onClick={() => setAoi(REGION)}>Clear area (whole US)</button>
           )}
-        </fieldset>
+        </Section>
 
-        <fieldset className="rounded border border-slate-700 p-3">
-          <legend className="px-1 font-medium">Hotspot filters</legend>
+        <Section title="Dates & filters" summary={`${start} → ${end}`} open>
           <div className="grid grid-cols-2 gap-2">
             <label className="flex flex-col"><span className="text-slate-400">From (UTC)</span>
               <input type="date" className="rounded border border-slate-600 bg-slate-800 px-1 py-1" value={start} onChange={(e) => setStart(e.target.value)} /></label>
@@ -135,26 +133,27 @@ export default function ExploreTab({ aoi, setAoi }: Props) {
           </label>
           {start > end && <p className="mt-1 text-red-300" role="alert">Start date is after end date.</p>}
           {sensorList.length === 0 && <p className="mt-1 text-amber-300" role="alert">Select at least one sensor.</p>}
-        </fieldset>
-        <fieldset className="rounded border border-slate-700 p-3">
-          <legend className="px-1 font-medium">Impact layers</legend>
+        </Section>
+
+        <Section title="Map layers" summary={`${OVERLAYS.filter((o) => overlays[o.id]).length} on · ${bufferKm} km exposure`}>
           <label className="mb-2 flex items-center gap-2"><span className="text-slate-400">Exposure distance</span>
             <select className="rounded border border-slate-600 bg-slate-800 px-2 py-1" value={bufferKm} onChange={(e) => setBufferKm(Number(e.target.value))}>
               {[1, 2, 5, 10, 20].map((k) => <option key={k} value={k}>{k} km</option>)}
             </select></label>
           <div className="space-y-1">
             {OVERLAYS.map((o) => (
-              <label key={o.id} className="flex items-start gap-1.5" title={o.note}>
-                <input type="checkbox" className="mt-1" checked={!!overlays[o.id]} disabled={!hasAoi && o.kind !== 'raster'}
+              <label key={o.id} className="flex items-center gap-1.5" title={o.note}>
+                <input type="checkbox" checked={!!overlays[o.id]} disabled={!hasAoi && o.kind !== 'raster'}
                        onChange={(e) => setOverlays({ ...overlays, [o.id]: e.target.checked })} />
-                <span>{o.label}<span className="block text-xs text-slate-500">{o.note}</span></span>
+                <span className="inline-block h-2.5 w-2.5 shrink-0 rounded-sm" style={{ background: o.color }} aria-hidden="true" />
+                {o.label}
               </label>
             ))}
           </div>
           {!hasAoi && <p className="mt-2 text-xs text-amber-200">Select an area to load points, roads and the fire exposure zone.</p>}
-        </fieldset>
-        <fieldset className="rounded border border-slate-700 p-3">
-          <legend className="px-1 font-medium">Live FIRMS feed</legend>
+        </Section>
+
+        <Section title="Live feed" summary={showLive ? `on · last ${liveDays} d` : 'off'}>
           <label className="flex items-center gap-1">
             <input type="checkbox" checked={showLive} onChange={(e) => setShowLive(e.target.checked)} /> Show live near-real-time hotspots
           </label>
@@ -172,17 +171,15 @@ export default function ExploreTab({ aoi, setAoi }: Props) {
             </p>
           )}
           <p className="mt-1 text-xs text-slate-500">Provisional and not filtered by fire type. Shown as rings.</p>
-        </fieldset>
-        <a className="block rounded border border-slate-500 px-3 py-1 text-center hover:bg-slate-800" download
+        </Section>
+        <a className="block px-1 py-1 text-xs text-slate-400 underline hover:text-slate-200" download
            href={withAoi('/api/export/hotspots.csv', aoi, `start=${start}&end=${end}&sensors=${sensorList.join(',')}`)}>
-          Download hotspots CSV (all rows, unfiltered)
+          ⤓ Download hotspots CSV (all rows, unfiltered)
         </a>
       </aside>
 
       <div className="min-w-0 space-y-3">
-        <FireRiskBrief aoi={aoi} />
-        <div className="mt-4"><ContextCard aoi={aoi} /></div>
-        <div className="grid gap-3 sm:grid-cols-3">
+        <div className="grid gap-2 sm:grid-cols-3">
           <Card title={`Hotspots ${start} → ${end}`}>
             {hs.isError ? <p className="text-red-300">{(hs.error as Error).message}</p> : hs.data ? (
               <>
@@ -202,8 +199,22 @@ export default function ExploreTab({ aoi, setAoi }: Props) {
         </div>
         <MapView aoi={aoi} onAoi={setAoi} mode={mode} onModeDone={() => setMode('none')} circleKm={circleKm} hotspots={hs.data} liveData={showLive ? liveQ.data : undefined}
           overlays={overlays} impactGeo={hasAoi ? impactGeo : {}} fireZone={hasAoi ? impactQ.data?.fire?.zone_geojson : null} />
-        <ImpactPanel data={hasAoi ? impactQ.data : ({ status: 'aoi_required', message: 'Select an area (preset, drawn shape or point + radius) to see what nearby fire activity could affect: people, homes in the wildland–urban interface, roads, hospitals, schools, airports, protected land and farmland.' } as ImpactResponse)}
-          loading={impactQ.isFetching} error={impactQ.error as Error | null} bufferKm={bufferKm} />
+        <div>
+          <div role="tablist" aria-label="Area details" className="flex gap-4 border-b border-slate-800 text-sm">
+            {([['brief', 'Fire Risk Brief'], ['impact', 'What could this affect?'], ['context', 'Drought & weather']] as const).map(([id, label]) => (
+              <button key={id} role="tab" aria-selected={panel === id} onClick={() => setPanel(id)}
+                      className={`-mb-px border-b-2 px-1 pb-2 ${panel === id ? 'border-orange-500 font-medium text-slate-100' : 'border-transparent text-slate-400 hover:text-slate-200'}`}>
+                {label}
+              </button>
+            ))}
+          </div>
+          <div className="pt-3" role="tabpanel">
+            {panel === 'brief' && <FireRiskBrief aoi={aoi} />}
+            {panel === 'context' && <ContextCard aoi={aoi} />}
+            {panel === 'impact' && <ImpactPanel data={hasAoi ? impactQ.data : ({ status: 'aoi_required', message: 'Select an area (preset, drawn shape or point + radius) to see what nearby fire activity could affect: people, homes in the wildland–urban interface, roads, hospitals, schools, airports, protected land and farmland.' } as ImpactResponse)}
+          loading={impactQ.isFetching} error={impactQ.error as Error | null} bufferKm={bufferKm} />}
+          </div>
+        </div>
         <p className="text-xs text-slate-500">
           Points are raw satellite detections (pixel centres), not fire perimeters. All times UTC. Not a forecast.
           Basemap © CARTO, © OpenStreetMap contributors. Fire data: NASA FIRMS.
@@ -242,9 +253,22 @@ function PointForm({ km, setKm, onSubmit }: { km: number; setKm: (v: number) => 
 
 function Card({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <div className="min-w-0 rounded-lg border border-slate-700 bg-slate-900/60 p-3">
+    <div className="min-w-0 rounded-lg bg-slate-900/70 px-3 py-2">
       <h3 className="text-xs text-slate-400">{title}</h3>
       {children}
     </div>
+  )
+}
+
+function Section({ title, summary, open = false, children }: { title: string; summary?: string; open?: boolean; children: React.ReactNode }) {
+  return (
+    <details open={open} className="group rounded-lg bg-slate-900/70">
+      <summary className="flex cursor-pointer list-none items-baseline justify-between gap-2 px-3 py-2 [&::-webkit-details-marker]:hidden">
+        <span className="font-medium">{title}</span>
+        <span className="min-w-0 truncate text-xs text-slate-400 group-open:hidden">{summary}</span>
+        <span className="text-slate-500 transition-transform group-open:rotate-90" aria-hidden="true">›</span>
+      </summary>
+      <div className="px-3 pb-3">{children}</div>
+    </details>
   )
 }

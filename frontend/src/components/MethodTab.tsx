@@ -54,7 +54,7 @@ export default function MethodTab({ aoi }: { aoi: Aoi }) {
         {cov.isError && <p className="text-red-300" role="alert">Could not load coverage: {(cov.error as Error).message}</p>}
         <div className="mt-2 grid gap-4 sm:grid-cols-2">
           {cov.data && (['MODIS', 'VIIRS'] as const).map((s) => (
-            <div key={s} className="min-w-0 break-words rounded-lg border border-slate-700 bg-slate-900/60 p-4">
+            <div key={s} className="min-w-0 break-words rounded-lg bg-slate-900/70 p-4">
               <h3 className="font-medium">{s}</h3>
               <p className="text-xs text-slate-400">{cov.data.products[s]}</p>
               <p className="mt-2 text-xl tabular-nums">{cov.data.sensors[s].rows.toLocaleString()} hotspots</p>

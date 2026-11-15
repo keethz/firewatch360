@@ -274,7 +274,7 @@ export default function MapView({ aoi, onAoi, mode, onModeDone, circleKm, hotspo
   }, [hotspots, ready])
 
   return (
-    <div className="relative h-[60vh] min-h-80 w-full overflow-hidden rounded-lg border border-slate-700">
+    <div className="relative h-[62vh] min-h-80 w-full overflow-hidden rounded-lg border border-slate-800">
       <div ref={el} className="h-full w-full" role="application" aria-label="Map of hotspots and area of interest" />
       {mode === 'polygon' && (
         <div className="absolute left-2 top-2 flex items-center gap-2 rounded bg-slate-900/90 px-2 py-1 text-xs">

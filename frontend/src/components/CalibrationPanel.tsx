@@ -18,7 +18,7 @@ export default function CalibrationPanel({ aoi }: { aoi: Aoi }) {
   const cal = data?.calibration
 
   return (
-    <section aria-labelledby="cal-h" className="mt-8 max-w-5xl rounded-lg border border-slate-700 bg-slate-900/60 p-4">
+    <section aria-labelledby="cal-h" className="mt-8 max-w-5xl rounded-lg bg-slate-900/70 p-4">
       <h2 id="cal-h" className="text-lg font-medium">MODIS → VIIRS harmonization</h2>
       <p className="text-sm text-slate-400">
         Monthly unique fire cell-days (0.01° grid, vegetation fires, nominal+high confidence). Fit: VIIRS ≈ k × MODIS on the overlap period.

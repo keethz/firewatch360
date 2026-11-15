@@ -48,7 +48,7 @@ export default function AlertsTab({ aoi }: { aoi: Aoi }) {
 
   return (
     <div className="grid gap-4 lg:grid-cols-[380px_1fr]">
-      <section aria-labelledby="save-h" className="rounded border border-slate-800 p-3">
+      <section aria-labelledby="save-h" className="rounded-lg bg-slate-900/70 p-3">
         <h2 id="save-h" className="mb-1 text-lg font-semibold">Watch an area</h2>
         <p className="mb-3 text-sm text-slate-400">Saves the area selected on the Explore tab: <strong className="text-slate-200">{describeAoi(aoi)}</strong></p>
         {isRegion && <p className="mb-3 rounded bg-amber-500/10 p-2 text-sm text-amber-200">Pick a specific area first (preset, drawn shape or point + radius) on the Explore tab.</p>}
@@ -87,7 +87,7 @@ export default function AlertsTab({ aoi }: { aoi: Aoi }) {
       </section>
 
       <div className="space-y-4">
-        <section aria-labelledby="areas-h" className="rounded border border-slate-800 p-3">
+        <section aria-labelledby="areas-h" className="rounded-lg bg-slate-900/70 p-3">
           <div className="mb-2 flex items-center justify-between">
             <h2 id="areas-h" className="text-lg font-semibold">Watched areas</h2>
             <button onClick={() => check.mutate(undefined)} disabled={check.isPending || !areas.data?.areas.length}
@@ -113,7 +113,7 @@ export default function AlertsTab({ aoi }: { aoi: Aoi }) {
           </ul>
         </section>
 
-        <section aria-labelledby="inbox-h" className="rounded border border-slate-800 p-3">
+        <section aria-labelledby="inbox-h" className="rounded-lg bg-slate-900/70 p-3">
           <h2 id="inbox-h" className="mb-2 text-lg font-semibold">Alerts</h2>
           {!ev.length && <p className="text-sm text-slate-400">No alerts yet.</p>}
           <ul className="space-y-2">

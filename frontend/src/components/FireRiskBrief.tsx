@@ -92,7 +92,7 @@ export default function FireRiskBrief({ aoi, extra = '' }: { aoi: Aoi; extra?: s
     }
   }
 
-  if (q.isLoading) return <div className="rounded-lg border border-slate-700 bg-slate-900/60 p-4 text-slate-400" role="status">Preparing the Fire Risk Brief…</div>
+  if (q.isLoading) return <div className="rounded-lg bg-slate-900/70 p-4 text-slate-400" role="status">Preparing the Fire Risk Brief…</div>
   if (q.isError) return <div className="rounded-lg border border-red-800 bg-red-950/40 p-4 text-red-200" role="alert">Fire Risk Brief unavailable: {(q.error as Error).message}</div>
   if (!b) return null
   const st = LEVEL[b.level]
