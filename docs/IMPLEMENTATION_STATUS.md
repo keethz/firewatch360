@@ -160,7 +160,7 @@ Known limits: WUI and land cover cover the lower 48 only; WUI tiles are slow (ab
 
 ## Fire types, outlook, burned area and smoke (done)
 
-- [x] Agricultural-burning filter: `prepare_cropland.py` (NLCD 2021 cropland/pasture share per 0.01° fire cell, 87 s), `exclude_agriculture` on all harmonized endpoints and `/api/hotspots`, header switch applied to every tab. Mississippi Delta 2024 −85%, Sierra Nevada −29% (includes Central Valley edge), US −22%.
+- [x] Agricultural-burning filter: `prepare_cropland.py` (NLCD 2021 cropland/pasture share per 0.01° fire cell, 87 s), `exclude_agriculture` on all harmonized endpoints and `/api/hotspots`, Explore-tab checkbox applied to every tab. Mississippi Delta 2024 −85%, Sierra Nevada −29% (includes Central Valley edge), US −22%.
 - [x] `/api/outlook`: 1–3 month persistence outlook with leave-one-year-out hindcast skill, tercile probabilities, expected value and 80% range; works with either metric and the farmland filter. Explore "Outlook" tab and a Calendar panel.
 - [x] `/api/burned` (WFIGS 2020+, MTBS 1984+; burned acres inside the area; yearly record) and `/api/burned/fire` (post-fire assessment: detections and daily FRP inside the perimeter, MTBS severity to 2021, pre-fire NLCD land cover, assets inside). Explore "Burned area" tab, fire-perimeter map layer, click a fire on the map or table.
 - [x] `/api/smoke` (NOAA HMS daily smoke, share of area by density, smoke-day series). Explore "Smoke" tab and smoke map layer.

@@ -9,7 +9,8 @@ the harmonizer: floor(lat / 0.01 + 1e-9)) and crop_pct (0-100, cropland + pastur
 Only cells with any agricultural land are written. Takes a few minutes; tiles are cached in
 data/cache/cropland so an interrupted run resumes.
 
-    python scripts/prepare_cropland.py
+    # from the firewatch360 folder
+    backend/.venv/bin/python backend/scripts/prepare_cropland.py
 """
 from __future__ import annotations
 

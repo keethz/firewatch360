@@ -8,7 +8,7 @@ router = APIRouter(prefix="/api")
 
 def _require_cropland(store) -> None:
     if not getattr(store, "has_cropland", False):
-        raise HTTPException(503, "Cropland mask not built. Run backend/scripts/prepare_cropland.py.")
+        raise HTTPException(503, "Cropland mask not built. From the firewatch360 folder run: backend/.venv/bin/python backend/scripts/prepare_cropland.py")
 
 
 def _store(request: Request):
