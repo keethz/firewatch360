@@ -78,4 +78,5 @@ export function zScale(colorblindAlt = false) {
 }
 
 export const fmtCompact = (v: number) =>
-  v >= 1e4 ? `${Math.round(v / 1e3)}k` : v >= 1e3 ? `${(v / 1e3).toFixed(1)}k` : String(Math.round(v))
+  v >= 1e7 ? `${Math.round(v / 1e6)}M` : v >= 999.5e3 ? `${(v / 1e6).toFixed(1)}M`
+  : v >= 1e4 ? `${Math.round(v / 1e3)}k` : v >= 1e3 ? `${(v / 1e3).toFixed(1)}k` : String(Math.round(v))

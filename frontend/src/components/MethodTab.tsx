@@ -78,6 +78,10 @@ export default function MethodTab({ aoi }: { aoi: Aoi }) {
         <h2 id="lim-h" className="text-lg font-medium">Limitations</h2>
         <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-slate-300">
           <li>Hotspots are thermal anomalies at satellite overpass times, not fire perimeters, burned area or fire counts. Clouds and smoke hide fires.</li>
+          <li><b>Exclude farmland fires</b> (header switch) drops detections in 0.01° cells that are at least half cropland or pasture/hay in NLCD 2021. It removes crop-residue and pasture burning (85% of Mississippi Delta detections, 22% US-wide in 2024) but also real wildfires that burn into farmland, and keeps burning on rangeland, which NLCD maps as grassland. Conterminous US only.</li>
+          <li>The <b>outlook</b> is an experimental statistical forecast from the persistence of recent anomalies. Its skill is modest (about 0.1–0.2 one month ahead, fading by three months) and it does not use weather forecasts, fuel moisture or ignitions. Each month shows its own hindcast skill; outlooks with no skill are labelled.</li>
+          <li><b>Burned area</b> comes from mapped perimeters (NIFC WFIGS from 2020, MTBS large fires from 1984), not from satellite detections. Burn severity (MTBS) runs through 2021. <b>Smoke</b> is NOAA's analyst-drawn smoke in the atmospheric column, not ground-level air quality.</li>
+          <li>The Intensity (FRP) calendar sums fire radiative power (MW) over all detections and is harmonized with its own k and c. It is a relative intensity index, not energy released, and is dominated by the largest fires: year-to-year validation error is about 16% US-wide, against about 5% for cell-days.</li>
           <li>One k and one c per area: the sensor relationship also varies by season, fire type and year (orbit drift, Terra's later overpass since about 2020).</li>
           <li>VIIRS detects more small and cool fires, so the relationship is not strictly proportional.</li>
           <li>Pre-Aqua (2000–2002) values assume the Terra/Aqua relationship of 2002–2011.</li>

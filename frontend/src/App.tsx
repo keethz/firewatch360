@@ -64,7 +64,7 @@ export default function App() {
       </main>
 
       <footer className="mt-10 border-t border-slate-800 pt-3 text-xs text-slate-500">
-        Prototype for NASA Space Apps 2026 · not an official NASA product · not a forecast · data: NASA FIRMS · all dates UTC
+        Prototype for NASA Space Apps 2026 · not an official NASA product · outlooks are experimental statistics, not fire-danger forecasts · data: NASA FIRMS, NIFC, MTBS, NOAA HMS, USGS NLCD · all dates UTC
       </footer>
     </div>
   )

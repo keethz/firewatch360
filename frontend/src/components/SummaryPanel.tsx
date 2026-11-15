@@ -1,3 +1,4 @@
+import { filterQuery } from '../lib/filters'
 import { useQuery } from '@tanstack/react-query'
 import { useRef, useState } from 'react'
 import { aoiQuery, describeAoi, type Aoi } from '../lib/aoi'
@@ -11,7 +12,7 @@ const sgn = (v: number) => (v > 0 ? '+' : '') + v.toFixed(0)
 
 export default function SummaryPanel({ aoi, extra = '' }: { aoi: Aoi; extra?: string }) {
   const aoiQs = aoiQuery(aoi)
-  const q = [aoiQs, extra].filter(Boolean).join('&')
+  const q = [aoiQs, extra, filterQuery()].filter(Boolean).join('&')
   const { data, error, isFetching } = useQuery({
     queryKey: ['anomalies', q],
     queryFn: () => getJson<AnomaliesResponse>(`/api/anomalies?${q}`),

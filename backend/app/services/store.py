@@ -21,6 +21,8 @@ class HotspotStore:
         if con is not None:  # injected connection with a `hotspots` table/view (tests)
             self._con = con
             self.available = True
+            self.has_cropland = bool(con.execute(
+                "SELECT count(*) FROM information_schema.tables WHERE table_name = 'cropland'").fetchone()[0])
             return
         self._con = duckdb.connect()
         self.available = Path(settings.coverage_path).exists()
@@ -30,6 +32,12 @@ class HotspotStore:
             self._con.execute(
                 f"CREATE VIEW hotspots AS SELECT * FROM read_parquet('{path}', hive_partitioning=true)"
             )
+        self.has_cropland = False
+        crop = settings.data_dir / "processed" / "cropland_cells.parquet"
+        if crop.exists():
+            # Small (one row per agricultural fire cell): load into memory for fast anti-joins.
+            self._con.execute("CREATE TABLE cropland AS SELECT * FROM read_parquet(?)", [str(crop)])
+            self.has_cropland = True
 
     @contextmanager
     def _session(self, aoi: AOI | None):

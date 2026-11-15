@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
 import { countScale, fmtCompact, textOn, zScale, Z_LIMIT, type SeqRamp } from '../lib/color'
+import { METRIC, type Metric } from '../lib/metric'
 import type { CalendarYear, MonthRow } from '../types/api'
 
 export type CalView = 'counts' | 'anomaly'
@@ -14,6 +15,7 @@ const SOURCE_LABEL: Record<MonthRow['source'], string> = {
 
 interface Props {
   years: CalendarYear[]
+  metric: Metric
   view: CalView
   ramp: SeqRamp
   altDiverging: boolean
@@ -59,7 +61,7 @@ export default function CalendarHeatmap(p: Props) {
   return (
     <div>
       <div className="overflow-x-auto pb-2" onMouseLeave={() => setTip(null)}>
-        <table className="w-full min-w-[40rem] border-separate border-spacing-[2px] text-xs tabular-nums" aria-label="Burning activity calendar: harmonized monthly fire cell-days by year and month">
+        <table className="w-full min-w-[40rem] border-separate border-spacing-[2px] text-xs tabular-nums" aria-label={`Burning activity calendar: harmonized monthly ${METRIC[p.metric].long} by year and month`}>
           <thead>
             <tr>
               <th scope="col" className="w-16 text-left font-normal text-slate-400">Year</th>
@@ -91,7 +93,7 @@ export default function CalendarHeatmap(p: Props) {
                       key={i}
                       style={cellStyle(m)}
                       className={`h-6 rounded-sm text-center ${m ? 'cursor-default' : 'bg-[repeating-linear-gradient(45deg,#1e293b_0_3px,transparent_3px_6px)]'} ${sel ? 'outline outline-1 outline-orange-400' : ''} ${m?.anomaly && p.view === 'counts' ? 'shadow-[inset_0_0_0_2px_#f8fafc]' : ''} ${m?.provisional ? 'outline-2 outline-dashed -outline-offset-2 outline-slate-200' : ''}`}
-                      aria-label={m ? describe(m) : `${MONTHS[i]} ${y.year}: no data`}
+                      aria-label={m ? describe(m, p.metric) : `${MONTHS[i]} ${y.year}: no data`}
                       tabIndex={m ? 0 : -1}
                       onMouseEnter={(e) => m && show(m, e.currentTarget)}
                       onFocus={(e) => m && show(m, e.currentTarget)}
@@ -114,7 +116,7 @@ export default function CalendarHeatmap(p: Props) {
         <div role="tooltip" className="pointer-events-none fixed z-50 -translate-x-1/2 -translate-y-full rounded border border-slate-600 bg-slate-950/95 px-2 py-1 text-xs shadow-lg"
              style={{ left: tip.x, top: tip.y - 6 }}>
           <div className="font-medium">{monthLabel(tip.row.month)}{tip.row.provisional && <span className="ml-1 rounded bg-amber-500/20 px-1 text-amber-200">provisional</span>}</div>
-          <div>Harmonized: <b>{n0(tip.row.harmonized)}</b> cell-days <span className="text-slate-400">({SOURCE_LABEL[tip.row.source]})</span></div>
+          <div>Harmonized: <b>{n0(tip.row.harmonized)}</b> {METRIC[p.metric].unit} <span className="text-slate-400">({SOURCE_LABEL[tip.row.source]})</span></div>
           <div className="text-slate-300">Raw MODIS {n0(tip.row.modis)}{tip.row.source === 'MODIS_terra_scaled' ? ` (Terra only ${n0(tip.row.modis_terra)})` : ''} · raw VIIRS {tip.row.viirs == null ? '—' : n0(tip.row.viirs)}</div>
           {tip.row.clim_median != null && (
             <div className="text-slate-300">
@@ -132,7 +134,7 @@ export default function CalendarHeatmap(p: Props) {
   )
 }
 
-function Legend({ view, ramp, altDiverging, min, max, zThreshold, switchMonth, aquaMonth }: Props & { min: number; max: number }) {
+function Legend({ metric, view, ramp, altDiverging, min, max, zThreshold, switchMonth, aquaMonth }: Props & { min: number; max: number }) {
   const cs = countScale(min, max, ramp)
   const zs = zScale(altDiverging)
   return (
@@ -140,7 +142,7 @@ function Legend({ view, ramp, altDiverging, min, max, zThreshold, switchMonth, a
       <div className="w-72 max-w-full">
         {view === 'counts' ? (
           <>
-            <div className="mb-1">Fire cell-days per month (log scale; zero = darkest)</div>
+            <div className="mb-1">{METRIC[metric].legend} (log scale; zero = darkest)</div>
             <div className="h-3 rounded-sm" style={{ background: cs.gradient() }} />
             <div className="relative h-4">
               {cs.ticks().map((t) => (
@@ -178,8 +180,8 @@ function monthLabel(m: string) {
   return `${MONTHS[Number(m.slice(5, 7)) - 1]} ${m.slice(0, 4)}`
 }
 
-function describe(m: MonthRow) {
-  let s = `${monthLabel(m.month)}: ${n0(m.harmonized)} fire cell-days (${SOURCE_LABEL[m.source]})`
+function describe(m: MonthRow, metric: Metric) {
+  let s = `${monthLabel(m.month)}: ${n0(m.harmonized)} ${METRIC[metric].long} (${SOURCE_LABEL[m.source]})`
   if (m.clim_median != null) s += `, median ${n0(m.clim_median)}`
   if (m.z != null) s += `, z ${m.z.toFixed(1)}`
   if (m.anomaly) s += `, ${m.anomaly} anomaly`

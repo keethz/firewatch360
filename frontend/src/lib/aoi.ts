@@ -1,3 +1,4 @@
+import { filterQuery } from './filters'
 export type Aoi =
   | { kind: 'region' }
   | { kind: 'bbox'; bbox: [number, number, number, number]; label?: string }
@@ -34,7 +35,7 @@ export function aoiQuery(aoi: Aoi): string {
 }
 
 export function withAoi(path: string, aoi: Aoi, extra = ''): string {
-  const parts = [aoiQuery(aoi), extra].filter(Boolean)
+  const parts = [aoiQuery(aoi), extra, filterQuery()].filter(Boolean)
   return parts.length ? `${path}?${parts.join('&')}` : path
 }
 

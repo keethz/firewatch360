@@ -5,6 +5,6 @@ import { defineConfig } from 'vite'
 export default defineConfig({
   plugins: [react(), tailwindcss()],
   server: {
-    proxy: { '/api': 'http://localhost:8000' },
+    proxy: { '/api': process.env.API_URL ?? 'http://localhost:8000' },
   },
 })

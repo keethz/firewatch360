@@ -20,6 +20,20 @@
 - Live proxy `/api/nrt` (Phase 5): sources `VIIRS_SNPP_NRT` and `MODIS_NRT`, last 1–10 days, 5-day chunks, cached in `data/cache/nrt/`.
 - Availability on 2026-11-14: `VIIRS_SNPP_NRT` 2026-08-01 → 2026-11-02 (feed ended); `MODIS_NRT` 2026-09-01 → 2026-11-14; `VIIRS_NOAA20_NRT` and `VIIRS_NOAA21_NRT` to 2026-11-14 (not used).
 
+## Cropland mask (agricultural-burning filter)
+- NLCD 2021 Land Cover L48 from the MRLC WCS (`mrlc_download__NLCD_2021_Land_Cover_L48`), sampled at ~90 m.
+- `backend/scripts/prepare_cropland.py`: for each of the 1.86 M 0.01° cells with any FIRMS detection in CONUS, the share of 16 sample points in classes 81 (pasture/hay) or 82 (cultivated crops). Output `data/processed/cropland_cells.parquet` (942 k cells with any agriculture; 28% of fire cells are ≥ 50% agricultural). Tiles cached in `data/cache/cropland/` (about 220 MB, ignored by git).
+
+## Fire perimeters and burn severity
+- NIFC WFIGS Interagency Perimeters (ArcGIS FeatureServer), 2020 onward, wildfires and prescribed fires, with containment. The WFIGS "perimeter history" view was not used: it is very incomplete (12 California fires for 2020).
+- MTBS Burned Area Boundaries, USFS EDW `EDW_MTBS_01` layer 63 (all years), 1984 onward, large fires.
+- MTBS thematic burn severity mosaics on the MRLC WCS (`mtbs__mtbs_CONUS_{year}`, `mtbs__mtbs_AK_{year}`), 1984–2021, EPSG:3857.
+- Land cover before the fire: the latest NLCD L48 epoch before the fire year (2001, 2004, 2006, 2008, 2011, 2013, 2016, 2019, 2021). NLCD 2021 already shows 2020 burn scars as grassland/shrub.
+- Cached in `data/cache/burned/` (current and previous year refreshed after 3 h).
+
+## Smoke
+- NOAA NESDIS Hazard Mapping System smoke polygons, daily shapefiles at https://satepsanone.nesdis.noaa.gov/pub/FIRE/web/HMS/Smoke_Polygons/Shapefile/ (Light / Medium / Heavy, nominally 5 / 16 / 27 µg/m³). Cached in `data/cache/smoke/`; days older than 3 days are final.
+
 ## Processed row counts by year
 Generated from `data/processed/coverage.json`. Rows are all hotspots. "Veg" is hotspots with `type` = 0.
 

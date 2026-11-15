@@ -1,9 +1,14 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 
 from app.services.aoi import AOI, AOIError, parse_aoi
-from app.services.harmonize import CONFIDENCE_LEVELS, HarmonizationParams
+from app.services.harmonize import AG_FILTER_SQL, CONFIDENCE_LEVELS, HarmonizationParams
 
 router = APIRouter(prefix="/api")
+
+
+def _require_cropland(store) -> None:
+    if not getattr(store, "has_cropland", False):
+        raise HTTPException(503, "Cropland mask not built. Run backend/scripts/prepare_cropland.py.")
 
 
 def _store(request: Request):
@@ -27,11 +32,17 @@ def aoi_param(
 
 
 def params_param(
+    request: Request,
     grid_deg: float = 0.01,
     min_confidence: str = "nominal",
     vegetation_only: bool = True,
+    metric: str = Query("cell_days", description="cell_days (extent) or frp (intensity: total fire radiative power, MW)"),
+    exclude_agriculture: bool = Query(False, description="drop detections in mostly-cropland 0.01 deg cells (NLCD 2021, CONUS)"),
 ) -> HarmonizationParams:
-    p = HarmonizationParams(grid_deg=grid_deg, min_confidence=min_confidence, vegetation_only=vegetation_only)
+    p = HarmonizationParams(grid_deg=grid_deg, min_confidence=min_confidence, vegetation_only=vegetation_only,
+                            metric=metric, exclude_agriculture=exclude_agriculture)
+    if exclude_agriculture:
+        _require_cropland(request.app.state.store)
     try:
         p.validate()
     except ValueError as exc:
@@ -177,7 +188,8 @@ def anomalies(request: Request, aoi: AOI = Depends(aoi_param), p: HarmonizationP
 def _csv_header_lines(meta: dict, cal: dict) -> list[str]:
     aoi = {k: v for k, v in meta["aoi"].items() if k != "geometry"}
     return [
-        "# FIREWATCH 360 harmonized monthly fire cell-days. Source: NASA FIRMS (MODIS C6.1, VIIRS S-NPP 375 m)",
+        f"# FIREWATCH 360 harmonized monthly {'total fire radiative power (MW)' if meta.get('metric') == 'frp' else 'fire cell-days'}."
+        " Source: NASA FIRMS (MODIS C6.1, VIIRS S-NPP 375 m)",
         f"# aoi={aoi} window={meta['window'][0]}..{meta['window'][1]} grid_deg={meta['parameters']['grid_deg']}"
         f" min_confidence={meta['parameters']['min_confidence']} vegetation_only={meta['parameters']['vegetation_only']}",
         f"# k={cal['k']:.6f} calibration_scope={cal['scope']} calibration_status={cal['status']}"
@@ -193,7 +205,8 @@ def export_calendar(request: Request, aoi: AOI = Depends(aoi_param), p: Harmoniz
     a = _analysis(request, aoi, p, w)
     buf = io.StringIO()
     buf.write("\n".join(_csv_header_lines(a["meta"], a["calibration"])) + "\n")
-    cols = ["year", "month", "harmonized_cell_days", "source", "modis_cell_days", "modis_terra_cell_days", "viirs_cell_days",
+    u = "frp_mw" if p.metric == "frp" else "cell_days"
+    cols = ["year", "month", f"harmonized_{u}", "source", f"modis_{u}", f"modis_terra_{u}", f"viirs_{u}",
             "baseline_median", "pct_vs_median", "robust_z", "anomaly"]
     wr = csv.writer(buf)
     wr.writerow(cols)
@@ -262,6 +275,7 @@ def hotspots(
     sensors: str = Query("MODIS,VIIRS"),
     min_confidence: str = "nominal",
     vegetation_only: bool = True,
+    exclude_agriculture: bool = False,
     limit: int = Query(20_000, ge=1, le=MAX_MAP_POINTS),
 ) -> dict:
     """Hotspots as GeoJSON points. Over `limit`, a deterministic spatial-temporal sample is returned
@@ -286,6 +300,9 @@ def hotspots(
     params = [*params, start, end, *sens, *conf]
     if vegetation_only:
         filt += " AND (type = 0 OR processing_level = 'nrt')"
+    if exclude_agriculture:
+        _require_cropland(store)
+        filt += " AND " + AG_FILTER_SQL
     agg = store.query(
         f"""SELECT count(*) AS n, count(*) FILTER (WHERE sensor = 'MODIS') AS modis,
                    count(*) FILTER (WHERE sensor = 'VIIRS') AS viirs,
@@ -881,3 +898,177 @@ def reported_monthly(request: Request, aoi: AOI = Depends(aoi_param),
     return {"status": "ok", "source": rep.SOURCE, "coverage_start": rep.COVERAGE_START.isoformat()[:7], "months": months,
             "note": "Reported incidents by discovery month vs harmonized satellite fire cell-days. One large fire is one "
                     "incident but many satellite detections; small fires may be reported but not detected."}
+
+
+# ---------------------------------------------------------------- outlook (experimental forecast)
+
+from app.services import outlook as _outlook  # noqa: E402
+
+
+@router.get("/outlook")
+def fire_outlook(request: Request, aoi: AOI = Depends(aoi_param), p: HarmonizationParams = Depends(params_param)) -> dict:
+    """Experimental 1-3 month statistical outlook of harmonized monthly fire activity, with hindcast skill."""
+    _store(request)
+    h = request.app.state.harmonizer
+    try:
+        series = h.harmonized(aoi, p)["series"]
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    return {**h.meta(aoi, p), **_outlook.outlook(series)}
+
+
+# ---------------------------------------------------------------- burned area, post-fire, smoke
+
+from datetime import timedelta  # noqa: E402
+
+import httpx  # noqa: E402
+import shapely  # noqa: E402
+import shapely.geometry  # noqa: E402
+from shapely.geometry import box as _box  # noqa: E402
+
+from app.services import burned as _burned  # noqa: E402
+from app.services import smoke as _smoke  # noqa: E402
+
+US_BOX = _box(-125.0, 24.0, -66.5, 49.5)  # conterminous US, for the whole-region view
+
+
+def _area(aoi: AOI):
+    return US_BOX if aoi.kind == "region" else imp.aoi_geometry(aoi)
+
+
+@router.get("/burned")
+def burned_area(request: Request, aoi: AOI = Depends(aoi_param),
+                year: int | None = Query(None, ge=_burned.MTBS_START, description="fire start year (default: this year)")) -> dict:
+    """Mapped fire perimeters intersecting the area for one year, burned acres inside the area, and the
+    yearly record (MTBS 1984+, WFIGS 2020+)."""
+    bc = request.app.state.burned
+    year = year or bc.today().year
+    if year > bc.today().year:
+        raise HTTPException(422, "year is in the future")
+    area = _area(aoi)
+    try:
+        fires = bc.fires(area, year, offset_deg=0.01 if aoi.kind == "region" else 0.002)
+        yearly = bc.yearly(area)
+    except _burned.BurnedError as exc:
+        raise HTTPException(502, str(exc)) from exc
+    source = "wfigs" if year >= _burned.WFIGS_START else "mtbs"
+    summ = _burned.area_summary(fires, area)
+    wf = [f for f in fires if f["type"] == "Wildfire"]
+    # Containment fields are often never filled in for past fires, so "still burning" is only reported
+    # for the current year.
+    live = year == bc.today().year
+    active = [f for f in fires if live and f["source"] == "wfigs" and (f.get("percent_contained") or 0) < 100 and not f.get("contained")]
+    largest = [{k: v for k, v in f.items() if k != "rings"} for f in fires[:25]]
+    if fires:
+        top = fires[0]
+        headline = (f"{len(fires):,} mapped fire{'s' if len(fires) != 1 else ''} in {year} burned about "
+                    f"{summ['acres_in_area']:,} acres inside this area ({summ['pct_of_area']:.2f}% of it); "
+                    f"largest: {top['name']} ({(top['acres'] or 0):,.0f} acres).")
+    else:
+        headline = f"No mapped fire perimeters in this area for {year}."
+    return {
+        "year": year, "source": source, "source_label": _burned.SOURCES[source], "headline": headline,
+        "n_fires": len(fires), "n_wildfires": len(wf), "n_prescribed": len(fires) - len(wf), "n_active": len(active) if live else None,
+        **summ, "fires": largest, "truncated": len(fires) >= _burned.MAX_FIRES,
+        "geojson": _burned.fires_geojson(fires), "yearly": yearly,
+        "note": ("Perimeters are mapped by agencies (WFIGS) or from Landsat (MTBS, large fires only). Fire acres are whole-fire "
+                 "totals; 'inside this area' clips perimeters to the area and counts overlaps once."),
+    }
+
+
+@router.get("/burned/fire")
+def post_fire(request: Request, source: str = Query(..., pattern="^(wfigs|mtbs)$"), id: int = Query(..., ge=0)) -> dict:  # noqa: A002
+    """Post-fire assessment of one mapped fire: satellite detections inside the perimeter, burn severity,
+    land cover burned and mapped assets inside."""
+    store = _store(request)
+    bc = request.app.state.burned
+    try:
+        fire = bc.fire(source, id)
+        g = _burned.geom_from_feature(fire)
+    except _burned.BurnedError as exc:
+        raise HTTPException(404 if "not found" in str(exc) else 502, str(exc)) from exc
+    a = fire["attributes"]
+    if source == "wfigs":
+        name, acres = a.get("poly_IncidentName"), a.get("poly_GISAcres")
+        start, end = _burned._iso(a.get("attr_FireDiscoveryDateTime")), _burned._iso(a.get("attr_ContainmentDateTime"))
+    else:
+        name, acres = (a.get("fire_name") or "").title(), a.get("acres")
+        start, end = _burned._iso(a.get("ig_date")), None
+    if not start:
+        raise HTTPException(422, "Fire has no start date")
+    d0 = date.fromisoformat(start) - timedelta(days=3)
+    d1 = date.fromisoformat(end) + timedelta(days=3) if end else date.fromisoformat(start) + timedelta(days=150)
+    d1 = min(d1, bc.today())
+    w, s, e, n = g.bounds
+    shapely.prepare(g)
+    fa = AOI("polygon", bbox=(w, s, e, n), geometry=g, key=f"fire:{source}:{id}")
+    where, params = fa.sql()
+    rows = store.query(
+        f"""SELECT acq_date AS d, count(*) AS n, sum(greatest(coalesce(frp, 0), 0)) AS frp, max(frp) AS frp_max,
+                   count(*) FILTER (WHERE sensor = 'VIIRS') AS viirs
+            FROM hotspots WHERE {where} AND acq_date BETWEEN ? AND ? AND (type = 0 OR processing_level = 'nrt')
+            GROUP BY 1 ORDER BY 1""", [*params, d0, d1], aoi=fa)
+    daily = [{"date": str(r["d"]), "detections": int(r["n"]), "frp_mw": round(float(r["frp"] or 0), 1)} for r in rows]
+    det = {"total": sum(r["detections"] for r in daily), "frp_total_mw": round(sum(r["frp_mw"] for r in daily), 1),
+           "frp_max_mw": max((float(r["frp_max"] or 0) for r in rows), default=0.0),
+           "first": daily[0]["date"] if daily else None, "last": daily[-1]["date"] if daily else None,
+           "active_days": len(daily), "window": [d0.isoformat(), d1.isoformat()],
+           "peak_day": max(daily, key=lambda r: r["frp_mw"])["date"] if daily else None, "daily": daily}
+
+    geo = imp.make_geo(fa)
+    static = request.app.state.impact_static
+    assets = {}
+    if static.available:
+        for layer in ("places", "hospitals", "schools", "firestations", "airports"):
+            if layer in static.frames:
+                sub = static.points_in(layer, geo)
+                assets[layer] = {"count": int(len(sub)), "names": [str(x) for x in sub.get("name", []).head(8).tolist()]}
+        rd = static.roads_in(geo)
+        assets["roads_km"] = round(float(sum(gm.length for gm in rd["geom_m"])) / 1000, 1) if len(rd) else 0.0
+    sev = bc.severity(g, int(start[:4]))
+    land = {"status": "not_available", "message": "NLCD covers the conterminous US only"}
+    if imp.CONUS.contains(g.centroid):
+        try:
+            with request.app.state.impact_live.http() as client:
+                epoch = _burned.pre_fire_nlcd(int(start[:4]))
+                cov = imp.NLCD_COVERAGE.replace("2021", str(epoch))
+                hist = request.app.state.impact_live.get(("nlcd", g.wkt, None, cov),
+                                                         lambda: imp.nlcd_histogram(client, g, None, coverage=cov))
+            km2 = {imp.NLCD_CLASSES.get(int(k), str(k)): v for k, v in hist["in_area"].items()}
+            land = {"status": "ok", "epoch": epoch, "acres_by_class": {k: round(v * _burned.ACRES_PER_KM2) for k, v in
+                                                       sorted(km2.items(), key=lambda kv: -kv[1]) if v * _burned.ACRES_PER_KM2 >= 1},
+                    "source": f"NLCD {epoch} land cover before the fire (MRLC), ~{hist['pixel_m']:.0f} m"}
+        except Exception as exc:  # noqa: BLE001 - live service; report, don't fail the whole assessment
+            land = {"status": "unavailable", "message": f"Land cover service unavailable ({type(exc).__name__})"}
+    area_km2 = geo.area_km2
+    mapped = {k: v for k, v in (sev.get("acres_by_class") or {}).items() if k not in ("Non-processing area",)}
+    tot = sum(mapped.values())
+    high_pct = round(100 * mapped.get("High", 0) / tot, 1) if tot else None
+    parts = [f"{name} ({start[:4]}) burned {acres or area_km2 * _burned.ACRES_PER_KM2:,.0f} acres"]
+    if det["total"]:
+        parts.append(f"satellites detected it on {det['active_days']} days between {det['first']} and {det['last']}")
+    if high_pct is not None:
+        parts.append(f"{high_pct:.0f}% of the mapped area burned at high severity")
+    return {
+        "source": source, "id": id, "name": name, "acres": acres, "start": start, "contained": end,
+        "perimeter_km2": round(area_km2, 1), "headline": "; ".join(parts) + ".",
+        "geojson": {"type": "Feature", "geometry": shapely.geometry.mapping(shapely.simplify(g, 0.0005, preserve_topology=True)),
+                    "properties": {"name": name}},
+        "detections": det, "severity": sev, "land_cover": land, "assets_inside": assets,
+        "note": ("Assets inside the perimeter were exposed to fire, not necessarily damaged. Severity is Landsat dNBR-based "
+                 "(MTBS) and covers 1984–2021. Detections inside the perimeter may include nearby unrelated fires."),
+    }
+
+
+@router.get("/smoke")
+def smoke(request: Request, aoi: AOI = Depends(aoi_param),
+          day: date | None = Query(None, alias="date", description="UTC date YYYY-MM-DD (default: latest analysed)"),
+          days: int = Query(14, ge=1, le=_smoke.MAX_DAYS)) -> dict:
+    """NOAA HMS smoke plumes over the area on one day, and a daily smoke series for the days before."""
+    sc = request.app.state.smoke
+    if day and day > sc.today():
+        raise HTTPException(422, "date is in the future")
+    try:
+        return _smoke.summarize(sc, _area(aoi), day, days)
+    except (httpx.HTTPError, RuntimeError) as exc:
+        raise HTTPException(502, f"Smoke data unavailable: {exc}") from exc

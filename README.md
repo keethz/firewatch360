@@ -37,6 +37,11 @@ FIREWATCH 360 merges NASA FIRMS active-fire detections from **MODIS** (2000 onwa
 - **Drought & fire weather**: for the selected area, the share in each U.S. Drought Monitor category (D0–D4) for the chosen month and now, the Drought Severity and Coverage Index, and any active NWS Red Flag Warning or Fire Weather Watch. Shown on Explore and for each anomaly cell, and passed to the AI explanations.
 - **Compare**: two years for the same area, or two areas in the same year. Monthly chart (cell-days or % vs each side's own median) and a table of totals, % vs median, peak month and unusual months.
 - **Alerts**: watch a saved area and get an alert when its activity is unusual, when new satellite detections appear inside it or within X km, or when a Red Flag Warning / Fire Weather Watch is issued. In-app inbox, optional webhook (Slack, Teams…) and e-mail (SMTP). Each alert is sent once. Run `backend/scripts/check_alerts.py` on a schedule (e.g. hourly cron).
+- **Exclude farmland fires**: a header switch that drops detections in 0.01° cells that are at least half cropland or pasture (NLCD 2021) from every tab, separating agricultural burning from wildfires. Built once with `backend/scripts/prepare_cropland.py` (about 2 minutes).
+- **Fire activity outlook** (experimental): the next 1–3 months for any area as below / near / above normal probabilities, an expected value and an 80% range, from the persistence of recent anomalies, with each month's hindcast skill shown (and "no skill" said plainly). On Explore and Calendar.
+- **Burned area and post-fire assessment**: mapped fire perimeters for any year (NIFC WFIGS 2020+, MTBS 1984+) on the map and as a table, acres burned inside the area, and the yearly record. Click a fire for its post-fire assessment: satellite detections and daily fire radiative power inside the perimeter, MTBS burn severity (to 2021), land cover before the fire (NLCD) and the mapped assets inside.
+- **Smoke**: NOAA HMS satellite smoke plumes (light / medium / heavy) on the map for any day since 2005, the share of the area covered, and a 14-day smoke series.
+- **Fire intensity (FRP) calendar** and **Download all as PDF** on the Calendar and Explore tabs.
 - **Current month**: month-to-date compared with the same days of that month in every baseline year. Labelled provisional.
 - **Method & data**: calibration charts and statistics, parameters, data as-of dates, limitations, attribution.
 - **Downloads**: harmonized calendar CSV (with the calibration in its header) and a raw hotspot CSV for the selected area and dates.
@@ -182,6 +187,8 @@ Phase 6 (deployment and demo) is not started. See [docs/IMPLEMENTATION_STATUS.md
 - One k and one c per area. The real sensor relationship varies with season, fire type and orbit drift.
 - FIRMS VIIRS S-NPP NRT ended on 2026-11-02, so the current month uses MODIS NRT × k. NOAA-20/21 VIIRS are not used.
 - Only United States data are loaded.
+- The farmland filter and land-cover summaries use NLCD, which covers the conterminous US only. Burn severity mosaics stop at 2021.
+- The outlook is a statistical persistence model with modest skill, not a fire-danger forecast.
 
 ## Data and attribution
 

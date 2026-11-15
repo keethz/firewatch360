@@ -1,10 +1,15 @@
-import { keepPreviousData, useQueries, useQuery } from '@tanstack/react-query'
-import { useEffect, useRef, useState, type FormEvent } from 'react'
+import { keepPreviousData, useQueries, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { describeAoi, PRESETS, REGION, withAoi, type Aoi } from '../lib/aoi'
 import { getJson, todayUtc, notFuture } from '../lib/api'
 import type { AnomaliesResponse, HotspotsResponse, ImpactResponse, NrtResponse, ReportedResponse } from '../types/api'
 import AllPanelsPdf from './AllPanelsPdf'
+import { getExcludeAg, setExcludeAg } from '../lib/filters'
+import BurnedPanel from './BurnedPanel'
 import CurrentCard from './CurrentCard'
+import OutlookCard from './OutlookCard'
+import SmokePanel from './SmokePanel'
+import { burnedQuery, postFireQuery, smokeQuery, type FireRef } from '../lib/hazards'
 import ContextCard from './ContextCard'
 import FireRiskBrief from './FireRiskBrief'
 import ImpactPanel from './ImpactPanel'
@@ -12,6 +17,12 @@ import { OVERLAYS, type OverlayId, type VectorOverlay } from '../lib/overlays'
 import MapView, { type DrawMode } from './MapView'
 
 const n0 = (v: number) => Math.round(v).toLocaleString()
+
+type Panel = 'brief' | 'outlook' | 'impact' | 'burned' | 'smoke' | 'context'
+const PANELS: [Panel, string][] = [
+  ['brief', 'Fire Risk Brief'], ['outlook', 'Outlook'], ['impact', 'What could this affect?'],
+  ['burned', 'Burned area'], ['smoke', 'Smoke'], ['context', 'Drought & weather'],
+]
 
 interface Props {
   aoi: Aoi
@@ -26,11 +37,21 @@ export default function ExploreTab({ aoi, setAoi }: Props) {
   const [sensors, setSensors] = useState({ MODIS: true, VIIRS: true })
   const [minConf, setMinConf] = useState('nominal')
   const [vegOnly, setVegOnly] = useState(true)
+  const [noAg, setNoAg] = useState(getExcludeAg)
+  const qc = useQueryClient()
+  const toggleAg = (v: boolean) => {
+    setExcludeAg(v)
+    setNoAg(v)
+    qc.resetQueries() // every cached result was computed with the old filter
+  }
   const [showLive, setShowLive] = useState(false)
   const [liveDays, setLiveDays] = useState(3)
   const [bufferKm, setBufferKm] = useState(5)
-  const [panel, setPanel] = useState<'brief' | 'impact' | 'context'>('brief')
-  const [overlays, setOverlays] = useState<Partial<Record<OverlayId, boolean>>>({ firezone: true, hospitals: true, schools: true, firestations: true })
+  const [panel, setPanel] = useState<Panel>('brief')
+  const [burnYear, setBurnYear] = useState(() => new Date().getUTCFullYear())
+  const [smokeDate, setSmokeDate] = useState('')
+  const [fire, setFire] = useState<FireRef | null>(null)
+  const [overlays, setOverlays] = useState<Partial<Record<OverlayId, boolean>>>({ firezone: true })
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === 'Escape' && setMode('none')
@@ -77,6 +98,24 @@ export default function ExploreTab({ aoi, setAoi }: Props) {
     })),
   })
   const impactGeo = Object.fromEntries(vectorIds.map((id, i) => [id, featQs[i]?.data])) as Partial<Record<VectorOverlay, unknown>>
+  // Polygon overlays: fetched when shown on the map or opened in their panel (same query keys, so shared).
+  const burnedQ = useQuery({ ...burnedQuery(aoi, burnYear), enabled: !!overlays.perimeters || panel === 'burned' })
+  const smokeQ = useQuery({ ...smokeQuery(aoi, smokeDate), enabled: !!overlays.smoke || panel === 'smoke' })
+  const fireQ = useQuery(postFireQuery(fire))
+  const areaGeo = useMemo(() => ({
+    perimeters: overlays.perimeters ? burnedQ.data?.geojson : undefined,
+    smoke: overlays.smoke ? smokeQ.data?.plumes : undefined,
+    selectedFire: fireQ.data?.geojson,
+  }), [overlays.perimeters, overlays.smoke, burnedQ.data, smokeQ.data, fireQ.data])
+  const openPanel = (id: Panel) => {
+    setPanel(id)
+    if (id === 'burned' && !overlays.perimeters) setOverlays((o) => ({ ...o, perimeters: true }))
+    if (id === 'smoke' && !overlays.smoke) setOverlays((o) => ({ ...o, smoke: true }))
+  }
+  const selectFire = useCallback((f: FireRef | null) => {
+    setFire(f)
+    if (f) setPanel('burned')
+  }, [])
   const liveQ = useQuery({
     queryKey: ['nrt', aoi, liveDays, minConf],
     queryFn: () => getJson<NrtResponse>(withAoi('/api/nrt', aoi, `days=${liveDays}&min_confidence=${minConf}`)),
@@ -138,6 +177,10 @@ export default function ExploreTab({ aoi, setAoi }: Props) {
             </select></label>
           <label className="mt-2 flex items-center gap-1">
             <input type="checkbox" checked={vegOnly} onChange={(e) => setVegOnly(e.target.checked)} /> Vegetation fires only (type 0)
+          </label>
+          <label className="mt-1 flex items-center gap-1"
+                 title="Drop detections in 0.01° cells that are at least half cropland or pasture (NLCD 2021), i.e. presumed agricultural burning. Conterminous US only; also applies to the other tabs.">
+            <input type="checkbox" checked={noAg} onChange={(e) => toggleAg(e.target.checked)} /> Exclude farmland fires
           </label>
           {start > end && <p className="mt-1 text-red-300" role="alert">Start date is after end date.</p>}
           {sensorList.length === 0 && <p className="mt-1 text-amber-300" role="alert">Select at least one sensor.</p>}
@@ -220,19 +263,23 @@ export default function ExploreTab({ aoi, setAoi }: Props) {
           <CurrentCard data={an.data} loading={an.isLoading} error={an.isError} />
         </div>
         <MapView aoi={aoi} onAoi={setAoi} mode={mode} onModeDone={() => setMode('none')} circleKm={circleKm} hotspots={hs.data} liveData={showLive ? liveQ.data : undefined}
-          overlays={overlays} impactGeo={{ ...(hasAoi ? impactGeo : {}), reported: overlays.reported ? reportedQ.data?.geojson : undefined }} fireZone={hasAoi ? impactQ.data?.fire?.zone_geojson : null} />
+          overlays={overlays} impactGeo={{ ...(hasAoi ? impactGeo : {}), reported: overlays.reported ? reportedQ.data?.geojson : undefined }} fireZone={hasAoi ? impactQ.data?.fire?.zone_geojson : null}
+          areaGeo={areaGeo} onSelectFire={selectFire} />
         <div>
-          <div role="tablist" aria-label="Area details" className="flex gap-4 border-b border-slate-800 text-sm">
-            {([['brief', 'Fire Risk Brief'], ['impact', 'What could this affect?'], ['context', 'Drought & weather']] as const).map(([id, label]) => (
-              <button key={id} role="tab" aria-selected={panel === id} onClick={() => setPanel(id)}
-                      className={`-mb-px border-b-2 px-1 pb-2 ${panel === id ? 'border-orange-500 font-medium text-slate-100' : 'border-transparent text-slate-400 hover:text-slate-200'}`}>
+          <div role="tablist" aria-label="Area details" className="flex gap-x-4 gap-y-1 overflow-x-auto border-b border-slate-800 text-sm">
+            {PANELS.map(([id, label]) => (
+              <button key={id} role="tab" aria-selected={panel === id} onClick={() => openPanel(id)}
+                      className={`-mb-px shrink-0 whitespace-nowrap border-b-2 px-1 pb-2 ${panel === id ? 'border-orange-500 font-medium text-slate-100' : 'border-transparent text-slate-400 hover:text-slate-200'}`}>
                 {label}
               </button>
             ))}
           </div>
-          <div data-pdf={panel === 'brief' ? 'Fire Risk Brief' : panel === 'impact' ? 'What could this affect?' : 'Drought & weather'} className="pt-3" role="tabpanel">
+          <div data-pdf={PANELS.find(([id]) => id === panel)![1]} className="pt-3" role="tabpanel">
             {panel === 'brief' && <FireRiskBrief aoi={aoi} />}
             {panel === 'context' && <ContextCard aoi={aoi} />}
+            {panel === 'outlook' && <OutlookCard aoi={aoi} asSection={false} />}
+            {panel === 'burned' && <BurnedPanel aoi={aoi} year={burnYear} setYear={setBurnYear} selected={fire} onSelect={selectFire} />}
+            {panel === 'smoke' && <SmokePanel aoi={aoi} date={smokeDate} setDate={setSmokeDate} />}
             {panel === 'impact' && <ImpactPanel data={hasAoi ? impactQ.data : ({ status: 'aoi_required', message: 'Select an area (preset, drawn shape or point + radius) to see what nearby fire activity could affect: people, homes in the wildland–urban interface, roads, hospitals, schools, airports, protected land and farmland.' } as ImpactResponse)}
           loading={impactQ.isFetching} error={impactQ.error as Error | null} bufferKm={bufferKm} />}
           </div>

@@ -150,4 +150,22 @@ Known limits: WUI and land cover cover the lower 48 only; WUI tiles are slow (ab
 - [x] PNG downloads for the calendar and charts (footer with area, date, source)
 - [ ] PNG downloads not yet tested in a visible browser (the hidden preview pane pauses rendering)
 
+## PDF downloads and fire intensity (FRP) calendar (done)
+
+- [x] "Download all as PDF" on the Calendar tab (every panel) and the Explore tab (summary cards, map, open detail panel), one A4 landscape page each. Checked in a visible browser: 4 and 3 pages.
+- [x] `metric` parameter (`cell_days` default, `frp`) on every harmonized endpoint. FRP = fire radiative power summed over all detections per month (MW), negative MODIS values clipped to 0. Same k / c / baseline / anomaly / trend pipeline.
+- [x] Calendar tab: Activity / Intensity (FRP) switch drives the heatmap, legend, tooltip, year chart, CSV (`*_frp_mw` columns) and image/PDF captions. The historical summary panel stays on cell-days.
+- [x] US-wide FRP fit: k = 0.492 (R² 0.935, leave-one-year-out annual error 16%), Terra c = 2.07. Cell-days for comparison: k = 2.07, error 5%. Sep 2020 FRP: 3.85 M MW vs median 0.36 M (z 18.7).
+- [x] Tests: 95 passed (4 FRP tests: summing and clipping, known-ratio recovery, validation, real-data API and CSV)
+
+## Fire types, outlook, burned area and smoke (done)
+
+- [x] Agricultural-burning filter: `prepare_cropland.py` (NLCD 2021 cropland/pasture share per 0.01° fire cell, 87 s), `exclude_agriculture` on all harmonized endpoints and `/api/hotspots`, header switch applied to every tab. Mississippi Delta 2024 −85%, Sierra Nevada −29% (includes Central Valley edge), US −22%.
+- [x] `/api/outlook`: 1–3 month persistence outlook with leave-one-year-out hindcast skill, tercile probabilities, expected value and 80% range; works with either metric and the farmland filter. Explore "Outlook" tab and a Calendar panel.
+- [x] `/api/burned` (WFIGS 2020+, MTBS 1984+; burned acres inside the area; yearly record) and `/api/burned/fire` (post-fire assessment: detections and daily FRP inside the perimeter, MTBS severity to 2021, pre-fire NLCD land cover, assets inside). Explore "Burned area" tab, fire-perimeter map layer, click a fire on the map or table.
+- [x] `/api/smoke` (NOAA HMS daily smoke, share of area by density, smoke-day series). Explore "Smoke" tab and smoke map layer.
+- [x] Checked: California 2020 → 768 fires, 3.79 M acres inside; DOE fire (August Complex) → 44,436 detections over 65 days, 26% high severity, mostly evergreen forest and shrub (NLCD 2019); California 10 Sep 2020 → 100% under smoke, 72% heavy.
+- [x] Found while testing: NLCD 2021 maps 2020 burn scars as grassland, so post-fire land cover uses the epoch before the fire.
+- [x] Tests: 107 passed (12 new: farmland filter, outlook skill and no-skill, smoke coverage, burned area clipping and yearly record, severity years, API checks)
+
 ## Next: Phase 6 (deploy, README, demo recording)

@@ -7,7 +7,9 @@ from app.services.harmonize import Harmonizer
 from app.services.explain import Explainer
 from app.services.context import ContextClient
 from app.services.alerts import AlertStore
+from app.services.burned import BurnedClient
 from app.services.reported import ReportedClient
+from app.services.smoke import SmokeClient
 from app.services.impact import LiveCache, StaticLayers
 from app.services.nrt import NrtClient
 from app.services.store import HotspotStore
@@ -26,6 +28,8 @@ def create_app() -> FastAPI:
     app.state.context = ContextClient(settings.data_dir / "cache" / "context")
     app.state.alerts = AlertStore(settings.data_dir / "alerts")
     app.state.reported = ReportedClient(settings.data_dir / "cache" / "reported")
+    app.state.burned = BurnedClient(settings.data_dir / "cache" / "burned")
+    app.state.smoke = SmokeClient(settings.data_dir / "cache" / "smoke")
     app.state.nrt = NrtClient(settings.firms_map_key, settings.data_dir / "cache" / "nrt")
     app.add_middleware(
         CORSMiddleware,

@@ -365,3 +365,108 @@ export interface ReportedMonthly {
   note: string
   months: { month: string; wildfires: number; acres: number; satellite_cell_days: number | null; provisional: boolean | null }[]
 }
+
+// ---------------------------------------------------------------- outlook, burned area, smoke
+
+export interface OutlookLead {
+  lead: number
+  month: string
+  month_name: string
+  expected: number
+  range: [number, number]
+  typical: number
+  anomaly: number
+  probabilities: { below: number; near: number; above: number }
+  most_likely: 'below' | 'near' | 'above'
+  beta: number
+  skill: { msss: number; tercile_hit_rate: number; n_hindcasts: number; useful: boolean }
+}
+
+export interface OutlookResponse {
+  status: 'ok' | 'insufficient_history'
+  message?: string
+  headline?: string
+  issued_from?: string
+  issued_from_provisional?: boolean
+  recent?: { month: string; value: number; anomaly: number; provisional: boolean }[]
+  persistence_index?: number
+  leads?: OutlookLead[]
+  climatology_years?: [number, number]
+  method?: string
+  caveat?: string
+  metric?: string
+}
+
+export interface BurnedFire {
+  source: 'wfigs' | 'mtbs'
+  id: number
+  name: string
+  acres: number | null
+  type: string
+  start: string | null
+  contained: string | null
+  percent_contained: number | null
+  cause: string | null
+}
+
+export interface BurnedResponse {
+  year: number
+  source: 'wfigs' | 'mtbs'
+  source_label: string
+  headline: string
+  n_fires: number
+  n_wildfires: number
+  n_prescribed: number
+  n_active: number | null
+  acres_in_area: number
+  pct_of_area: number
+  fires: BurnedFire[]
+  truncated: boolean
+  geojson: unknown
+  yearly: { year: number; mtbs_acres: number; mtbs_fires: number; wfigs_acres?: number; wfigs_fires?: number }[]
+  note: string
+}
+
+export interface PostFireResponse {
+  source: string
+  id: number
+  name: string
+  acres: number | null
+  start: string
+  contained: string | null
+  perimeter_km2: number
+  headline: string
+  geojson: unknown
+  detections: {
+    total: number; frp_total_mw: number; frp_max_mw: number; first: string | null; last: string | null
+    active_days: number; peak_day: string | null; window: [string, string]
+    daily: { date: string; detections: number; frp_mw: number }[]
+  }
+  severity: { status: string; message?: string; acres_by_class?: Record<string, number>; source?: string; year?: number }
+  land_cover: { status: string; message?: string; acres_by_class?: Record<string, number>; source?: string }
+  assets_inside: Record<string, { count: number; names: string[] } | number>
+  note: string
+}
+
+export interface SmokeDay {
+  date: string
+  status: 'ok' | 'unavailable'
+  pct_covered?: { Light: number; Medium: number; Heavy: number }
+  pct_any?: number
+  worst?: 'Light' | 'Medium' | 'Heavy' | null
+}
+
+export interface SmokeResponse {
+  status: 'ok' | 'unavailable'
+  date: string
+  headline?: string
+  message?: string
+  today?: SmokeDay
+  plumes?: unknown
+  series: SmokeDay[]
+  days_with_smoke?: number
+  days_with_heavy_smoke?: number
+  days_analysed?: number
+  source: string
+  note?: string
+}

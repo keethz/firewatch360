@@ -3,10 +3,13 @@
 
 export type VectorOverlay = 'places' | 'roads' | 'hospitals' | 'schools' | 'firestations' | 'airports' | 'reported'
 export type RasterOverlay = 'protected' | 'wui' | 'landcover'
-export type OverlayId = VectorOverlay | RasterOverlay | 'firezone'
+export type AreaOverlay = 'perimeters' | 'smoke'
+export type OverlayId = VectorOverlay | RasterOverlay | AreaOverlay | 'firezone'
 
-export const OVERLAYS: { id: OverlayId; label: string; kind: 'vector' | 'raster' | 'zone'; color: string; glyph?: string; note: string }[] = [
+export const OVERLAYS: { id: OverlayId; label: string; kind: 'vector' | 'raster' | 'zone' | 'area'; color: string; glyph?: string; note: string }[] = [
   { id: 'firezone', label: 'Fire exposure zone', kind: 'zone', color: '#f43f5e', note: 'Within the buffer distance of a fire detection' },
+  { id: 'perimeters', label: 'Fire perimeters', kind: 'area', color: '#ef4444', note: 'Mapped burned areas for the Burned area year (NIFC WFIGS 2020+, MTBS before); click one for its post-fire assessment' },
+  { id: 'smoke', label: 'Smoke plumes', kind: 'area', color: '#94a3b8', note: 'NOAA HMS smoke for the Smoke date: light, medium, heavy' },
   { id: 'reported', label: 'Reported fires (NIFC)', kind: 'vector', color: '#f59e0b', glyph: 'R', note: 'NIFC WFIGS incidents in the date range, 2014+; size by acres' },
   { id: 'places', label: 'Population centers', kind: 'vector', color: '#e2e8f0', glyph: 'P', note: 'Natural Earth populated places' },
   { id: 'roads', label: 'Major roads', kind: 'vector', color: '#facc15', note: 'Natural Earth highways' },
@@ -33,3 +36,6 @@ export const RASTER_TILES: Record<RasterOverlay, { tiles: string[]; maxzoom: num
     maxzoom: 14, attribution: 'NLCD 2021, MRLC', opacity: 0.5,
   },
 }
+
+/** HMS smoke densities: light → heavy in increasing opacity and darkness (plus labels in the legend). */
+export const SMOKE_COLORS = { Light: '#cbd5e1', Medium: '#94a3b8', Heavy: '#475569' } as const

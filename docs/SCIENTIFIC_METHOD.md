@@ -55,6 +55,57 @@ All defaults (grid size, confidence threshold, 5 cell-day and 24 month minimums)
 - Before Aqua (2002-07-04) only Terra observed. This is corrected with factor c (step 5), which assumes the Terra/Aqua relationship seen in 2002–2011 also held in 2000–2002. A few US-wide spring months in 2001–2003 remain below normal (z −2 to −4.5). After the correction these may be real, but they have not been checked against independent records.
 - The series ends at the last complete month of final VIIRS data. NRT months are handled separately (Phase 5).
 
+## Fire intensity metric (FRP)
+
+`metric=frp` replaces unique cell-days with total fire radiative power per month: the FRP (MW) of every
+retained detection, summed, with no cell-day deduplication (two pixels burning in one cell both add energy).
+Negative MODIS FRP retrievals are clipped to 0. Filters (confidence, vegetation-only, static-source mask) are the same.
+
+The total depends on the sensor (VIIRS 375 m pixels see more small fires but report lower per-pixel FRP) and on the
+number of overpasses, so it goes through the same harmonization: VIIRS FRP = k · MODIS FRP on the overlap, and
+Terra+Aqua = c · Terra before Aqua. A month enters a fit when MODIS FRP ≥ 20 MW × `min_monthly_cell_days`.
+
+US-wide: k ≈ 0.49 (R² 0.94) but leave-one-year-out annual error ≈ 16%, against ≈ 5% for cell-days. A summed FRP is
+dominated by a few very large fires and is less stable year to year than an extent count. Read FRP as a relative
+intensity index, not as energy released; it is a sum of instantaneous snapshots, not time-integrated fire radiative energy.
+
+## Agricultural-burning filter
+
+`exclude_agriculture=true` drops detections whose 0.01° cell is at least 50% cropland or pasture/hay in NLCD 2021
+(classes 81, 82; 16 sample points per cell on a ~90 m raster). It applies to the harmonized series (so k, c,
+baselines and anomalies are recomputed on non-agricultural fires) and to the hotspot map. Effect in 2024: Mississippi
+Delta −85%, US −22%. Limits: a wildfire that burns into fields is partly removed; rangeland burning (NLCD grassland,
+e.g. the Flint Hills) is kept; Alaska and Hawaii are not filtered.
+
+## Fire activity outlook (experimental)
+
+On the harmonized monthly series x = log(1 + value): standardized anomaly a = (x − μ_m) / σ_m per calendar month
+(σ floored at 0.25). Predictor P = mean anomaly of the last 3 months. For lead h = 1, 2, 3: a(t+h) ≈ β_h · P(t),
+β_h fitted through the origin on all past issue months, residual spread s_h. Forecast: a normal distribution
+N(β_h · P, s_h) in anomaly space, converted to an expected value and 10th–90th percentile range, and to
+probabilities of the climatological terciles (below / near / above normal).
+
+Hindcast: for every complete year Y, μ, σ and β are refitted without Y and the outlooks issued in Y are scored.
+Mean square skill score vs climatology (predicting a = 0) and tercile hit rate are returned per lead.
+A lead counts as "useful" when MSSS > 0.05. Results on 2001–2025: California MSSS 0.16 / 0.09 / 0.08 for leads
+1–3 (hit rate 43% vs 33% by chance); US 0.08 / 0.01 / −0.01. It uses no weather, fuel or ignition information.
+
+## Burned area and post-fire assessment
+
+Fires intersecting the area for a year: WFIGS perimeters (2020+) or MTBS boundaries (before 2020). Burned acres
+inside the area = area of the union of perimeters clipped to the area (overlaps counted once, local equal-area
+projection). The yearly record uses whole-fire acres (MTBS sum per year; WFIGS sum per discovery year).
+
+Post-fire assessment of one fire: satellite detections inside the perimeter from 3 days before the discovery date to
+3 days after containment (or 150 days), with daily count and FRP; MTBS severity class areas from the mosaic for the
+fire year (Web Mercator pixels corrected by cos² latitude); NLCD class areas from the epoch before the fire; counts
+of mapped places, hospitals, schools, fire stations and airports inside, and road length.
+
+## Smoke
+
+NOAA HMS daily smoke polygons intersected with the area. Where densities overlap, the heaviest counts. A smoke day
+is a day with ≥ 10% of the area under any smoke; a heavy-smoke day has ≥ 10% under heavy smoke.
+
 ## Analytics (Phase 2, done)
 Code: `backend/app/services/analytics.py`. Endpoints: `/api/calendar`, `/api/climatology`, `/api/anomalies`, `/api/export/calendar.csv`, `/api/export/hotspots.csv`.
 

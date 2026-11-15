@@ -6,7 +6,7 @@ import 'maplibre-gl/dist/maplibre-gl.css'
 import workerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?url'
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { aoiRing, circleRing, type Aoi } from '../lib/aoi'
-import { OVERLAYS, RASTER_TILES, type OverlayId, type RasterOverlay, type VectorOverlay } from '../lib/overlays'
+import { OVERLAYS, RASTER_TILES, SMOKE_COLORS, type OverlayId, type RasterOverlay, type VectorOverlay } from '../lib/overlays'
 import type { HotspotsResponse, NrtResponse } from '../types/api'
 
 maplibregl.setWorkerUrl(workerUrl)
@@ -43,9 +43,14 @@ interface Props {
   overlays?: Partial<Record<OverlayId, boolean>>
   impactGeo?: Partial<Record<VectorOverlay, unknown>>
   fireZone?: unknown | null
+  /** Polygon overlays: fire perimeters, smoke plumes and the fire under post-fire assessment. */
+  areaGeo?: { perimeters?: unknown; smoke?: unknown; selectedFire?: unknown }
+  onSelectFire?: (f: { source: string; id: number }) => void
 }
 
-export default function MapView({ aoi, onAoi, mode, onModeDone, circleKm, hotspots, liveData, overlays = {}, impactGeo = {}, fireZone = null }: Props) {
+export default function MapView({ aoi, onAoi, mode, onModeDone, circleKm, hotspots, liveData, overlays = {}, impactGeo = {}, fireZone = null, areaGeo = {}, onSelectFire }: Props) {
+  const selectFire = useRef(onSelectFire)
+  useEffect(() => { selectFire.current = onSelectFire }, [onSelectFire])
   const el = useRef<HTMLDivElement>(null)
   const mapRef = useRef<maplibregl.Map | null>(null)
   const [ready, setReady] = useState(false)
@@ -98,6 +103,27 @@ export default function MapView({ aoi, onAoi, mode, onModeDone, circleKm, hotspo
       map.addSource('ov-firezone', { type: 'geojson', data: EMPTY })
       map.addLayer({ id: 'ov-firezone-fill', type: 'fill', source: 'ov-firezone', layout: { visibility: 'none' }, paint: { 'fill-color': '#f43f5e', 'fill-opacity': 0.12 } })
       map.addLayer({ id: 'ov-firezone', type: 'line', source: 'ov-firezone', layout: { visibility: 'none' }, paint: { 'line-color': '#f43f5e', 'line-width': 1.5, 'line-dasharray': [3, 2] } })
+      // Smoke under the perimeters; both under the AOI outline and the hotspots.
+      map.addSource('ov-smoke', { type: 'geojson', data: EMPTY })
+      map.addLayer({ id: 'ov-smoke', type: 'fill', source: 'ov-smoke', layout: { visibility: 'none' },
+        paint: { 'fill-color': ['match', ['get', 'density'], 'Heavy', SMOKE_COLORS.Heavy, 'Medium', SMOKE_COLORS.Medium, SMOKE_COLORS.Light],
+                 'fill-opacity': ['match', ['get', 'density'], 'Heavy', 0.55, 'Medium', 0.4, 0.25] } })
+      map.addLayer({ id: 'ov-smoke-line', type: 'line', source: 'ov-smoke', layout: { visibility: 'none' }, paint: { 'line-color': '#e2e8f0', 'line-width': 0.5, 'line-opacity': 0.6 } })
+      map.addSource('ov-perimeters', { type: 'geojson', data: EMPTY })
+      map.addLayer({ id: 'ov-perimeters', type: 'fill', source: 'ov-perimeters', layout: { visibility: 'none' },
+        paint: { 'fill-color': ['match', ['get', 'type'], 'Prescribed fire', '#a3e635', '#ef4444'], 'fill-opacity': 0.25 } })
+      map.addLayer({ id: 'ov-perimeters-line', type: 'line', source: 'ov-perimeters', layout: { visibility: 'none' },
+        paint: { 'line-color': ['match', ['get', 'type'], 'Prescribed fire', '#a3e635', '#f87171'], 'line-width': 1 } })
+      map.addSource('ov-selfire', { type: 'geojson', data: EMPTY })
+      map.addLayer({ id: 'ov-selfire', type: 'line', source: 'ov-selfire', paint: { 'line-color': '#fde047', 'line-width': 3 } })
+      map.on('click', 'ov-perimeters', (e: maplibregl.MapLayerMouseEvent) => {
+        const p = e.features?.[0]?.properties as Record<string, unknown> | undefined
+        if (!p || live.current.mode !== 'none') return
+        const acres = typeof p.acres === 'number' ? Math.round(p.acres).toLocaleString() : '?'
+        new maplibregl.Popup().setLngLat(e.lngLat).setHTML(
+          `<div style="color:#0f172a;font:12px system-ui"><b>${String(p.name ?? 'Fire')}</b><br/>${String(p.type ?? '')} · ${acres} acres<br/>started ${String(p.start ?? '?')}</div>`).addTo(map)
+        selectFire.current?.({ source: String(p.source), id: Number(p.id) })
+      })
       map.addSource('ov-roads', { type: 'geojson', data: EMPTY })
       map.addLayer({ id: 'ov-roads', type: 'line', source: 'ov-roads', layout: { visibility: 'none' },
         paint: { 'line-color': '#facc15', 'line-opacity': 0.8, 'line-width': ['match', ['get', 'type'], 'Major Highway', 2.5, 1.5] } })
@@ -251,6 +277,7 @@ export default function MapView({ aoi, onAoi, mode, onModeDone, circleKm, hotspo
     for (const o of OVERLAYS) {
       const on = !!overlays[o.id]
       if (o.id === 'firezone') { vis('ov-firezone', on); vis('ov-firezone-fill', on) }
+      else if (o.kind === 'area') { vis(`ov-${o.id}`, on); vis(`ov-${o.id}-line`, on) }
       else { vis(`ov-${o.id}`, on); vis(`ov-${o.id}-label`, on) }
     }
   }, [overlays, ready])
@@ -264,6 +291,15 @@ export default function MapView({ aoi, onAoi, mode, onModeDone, circleKm, hotspo
     const zone = fireZone ? ({ type: 'FeatureCollection', features: [{ type: 'Feature', properties: {}, geometry: fireZone }] } as unknown as FC) : EMPTY
     ;(map.getSource('ov-firezone') as GeoJSONSource | undefined)?.setData(zone)
   }, [impactGeo, fireZone, ready])
+
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map || !ready) return
+    ;(map.getSource('ov-perimeters') as GeoJSONSource | undefined)?.setData((areaGeo.perimeters as FC) ?? EMPTY)
+    ;(map.getSource('ov-smoke') as GeoJSONSource | undefined)?.setData((areaGeo.smoke as FC) ?? EMPTY)
+    const sel = areaGeo.selectedFire ? ({ type: 'FeatureCollection', features: [areaGeo.selectedFire] } as unknown as FC) : EMPTY
+    ;(map.getSource('ov-selfire') as GeoJSONSource | undefined)?.setData(sel)
+  }, [areaGeo.perimeters, areaGeo.smoke, areaGeo.selectedFire, ready])
 
   useEffect(() => {
     const map = mapRef.current
@@ -300,6 +336,8 @@ export default function MapView({ aoi, onAoi, mode, onModeDone, circleKm, hotspo
           <div key={o.id} className="mt-0.5 flex items-center gap-1.5">
             {o.glyph ? (
               <span className="inline-flex h-3 w-3 items-center justify-center rounded-full text-[8px] font-bold text-slate-900" style={{ background: o.color }}>{o.glyph}</span>
+            ) : o.id === 'smoke' ? (
+              <span className="inline-flex">{Object.values(SMOKE_COLORS).map((c) => <span key={c} className="inline-block h-2.5 w-1.5" style={{ background: c }} />)}</span>
             ) : o.kind === 'zone' ? (
               <span className="inline-block h-2.5 w-3 border border-dashed" style={{ borderColor: o.color, background: `${o.color}33` }} />
             ) : o.id === 'roads' ? (
@@ -307,7 +345,7 @@ export default function MapView({ aoi, onAoi, mode, onModeDone, circleKm, hotspo
             ) : (
               <span className="inline-block h-2.5 w-3 opacity-70" style={{ background: o.color }} />
             )}
-            {o.label}
+            {o.label}{o.id === 'smoke' && ' (light → heavy)'}{o.id === 'perimeters' && ' (green: prescribed)'}
           </div>
         ))}
         {liveData && (

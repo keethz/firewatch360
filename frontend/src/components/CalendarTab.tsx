@@ -3,10 +3,12 @@ import { useRef, useState } from 'react'
 import { describeAoi, withAoi, type Aoi } from '../lib/aoi'
 import { getJson } from '../lib/api'
 import type { SeqRamp } from '../lib/color'
+import { METRIC, metricQuery, type Metric } from '../lib/metric'
 import type { CalendarResponse, ClimatologyResponse } from '../types/api'
 import AllPanelsPdf from './AllPanelsPdf'
 import CalendarHeatmap, { type CalView } from './CalendarHeatmap'
 import ImageDownload from './ImageDownload'
+import OutlookCard from './OutlookCard'
 import ReportedChart from './ReportedChart'
 import SummaryPanel from './SummaryPanel'
 import YearChart from './YearChart'
@@ -15,6 +17,7 @@ const n0 = (v: number) => Math.round(v).toLocaleString()
 
 export default function CalendarTab({ aoi }: { aoi: Aoi }) {
   const [view, setView] = useState<CalView>('counts')
+  const [metric, setMetric] = useState<Metric>('cell_days')
   const [ramp, setRamp] = useState<SeqRamp>('viridis')
   const [altDiv, setAltDiv] = useState(false)
   const [showValues, setShowValues] = useState(true)
@@ -25,9 +28,11 @@ export default function CalendarTab({ aoi }: { aoi: Aoi }) {
   const tabRef = useRef<HTMLDivElement>(null)
 
   const bq = baseline ? `baseline_start=${baseline[0]}&baseline_end=${baseline[1]}` : ''
+  // Calendar, chart and CSV follow the chosen measure; the historical summary stays on cell-days.
+  const mq = [bq, metricQuery(metric)].filter(Boolean).join('&')
   const cal = useQuery({
-    queryKey: ['calendar', aoi, bq],
-    queryFn: () => getJson<CalendarResponse>(withAoi('/api/calendar', aoi, bq)),
+    queryKey: ['calendar', aoi, mq],
+    queryFn: () => getJson<CalendarResponse>(withAoi('/api/calendar', aoi, mq)),
     placeholderData: keepPreviousData,
   })
   const years = cal.data?.years ?? []
@@ -37,7 +42,7 @@ export default function CalendarTab({ aoi }: { aoi: Aoi }) {
   const selYear = year != null && years.some((y) => y.year === year) ? year : years.length ? years[years.length - 1].year : null
 
   // The comparison chart uses exactly the calendar's baseline so both views agree.
-  const cq = effBaseline && selYear ? `year=${selYear}&baseline_start=${effBaseline[0]}&baseline_end=${effBaseline[1]}` : ''
+  const cq = effBaseline && selYear ? [`year=${selYear}&baseline_start=${effBaseline[0]}&baseline_end=${effBaseline[1]}`, metricQuery(metric)].filter(Boolean).join('&') : ''
   const clim = useQuery({
     queryKey: ['climatology', aoi, cq],
     queryFn: () => getJson<ClimatologyResponse>(withAoi('/api/climatology', aoi, cq)),
@@ -57,9 +62,17 @@ export default function CalendarTab({ aoi }: { aoi: Aoi }) {
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div>
             <h2 id="cal-h" className="text-lg font-medium">Burning activity calendar</h2>
-            <p className="text-sm text-slate-400">{describeAoi(aoi)} · harmonized monthly fire cell-days (VIIRS-equivalent) · UTC months</p>
+            <p className="text-sm text-slate-400">{describeAoi(aoi)} · harmonized monthly {METRIC[metric].long} (VIIRS-equivalent) · UTC months</p>
           </div>
           <div data-noexport className="flex flex-wrap items-end gap-3 text-sm">
+            <div role="radiogroup" aria-label="Measure" className="flex overflow-hidden rounded border border-slate-600">
+              {(['cell_days', 'frp'] as const).map((m) => (
+                <button key={m} role="radio" aria-checked={metric === m} onClick={() => setMetric(m)} title={METRIC[m].hint}
+                        className={`px-3 py-1 ${metric === m ? 'bg-orange-600 font-medium' : 'hover:bg-slate-800'}`}>
+                  {METRIC[m].label}
+                </button>
+              ))}
+            </div>
             <div role="radiogroup" aria-label="Colour by" className="flex overflow-hidden rounded border border-slate-600">
               {(['counts', 'anomaly'] as const).map((v) => (
                 <button key={v} role="radio" aria-checked={view === v} onClick={() => setView(v)}
@@ -89,10 +102,10 @@ export default function CalendarTab({ aoi }: { aoi: Aoi }) {
               </fieldset>
             )}
             <label className="flex items-center gap-1 pb-1"><input type="checkbox" checked={showValues} onChange={(e) => setShowValues(e.target.checked)} /> Values</label>
-            <a className="rounded border border-slate-500 px-3 py-1 hover:bg-slate-800" download href={withAoi('/api/export/calendar.csv', aoi, bq)}>
+            <a className="rounded border border-slate-500 px-3 py-1 hover:bg-slate-800" download href={withAoi('/api/export/calendar.csv', aoi, mq)}>
               Download CSV
             </a>
-            <ImageDownload target={calRef} fileName={`firewatch360-calendar-${view}`} caption={`Burning activity calendar (${view === 'counts' ? 'counts' : 'anomaly z'}) · ${describeAoi(aoi)}`} />
+            <ImageDownload target={calRef} fileName={`firewatch360-calendar-${metric}-${view}`} caption={`Burning activity calendar (${METRIC[metric].label}, ${view === 'counts' ? 'counts' : 'anomaly z'}) · ${describeAoi(aoi)}`} />
           </div>
         </div>
 
@@ -112,7 +125,7 @@ export default function CalendarTab({ aoi }: { aoi: Aoi }) {
             )}
             <div className={`mt-3 transition-opacity ${cal.isFetching ? 'opacity-60' : ''}`}>
               <CalendarHeatmap
-                years={years} view={view} ramp={ramp} altDiverging={altDiv} showValues={showValues}
+                years={years} metric={metric} view={view} ramp={ramp} altDiverging={altDiv} showValues={showValues}
                 switchMonth={cal.data.windows.switch_month} aquaMonth={cal.data.windows.aqua_month} zThreshold={cal.data.z_threshold}
                 selectedYear={selYear} onSelectYear={setYear}
               />
@@ -143,11 +156,12 @@ export default function CalendarTab({ aoi }: { aoi: Aoi }) {
         {clim.isError && <p className="mt-3 text-red-300" role="alert">Could not load the comparison: {(clim.error as Error).message}</p>}
         {clim.data && selYear && (
           <div className={clim.isFetching ? 'opacity-60' : ''}>
-            <YearChart year={selYear} months={clim.data.climatology.months} rows={clim.data.selected_year_rows} />
+            <YearChart metric={metric} year={selYear} months={clim.data.climatology.months} rows={clim.data.selected_year_rows} />
           </div>
         )}
       </section>
 
+      <OutlookCard aoi={aoi} metric={metric} />
       <ReportedChart aoi={aoi} />
       <SummaryPanel aoi={aoi} extra={bq} />
     </div>

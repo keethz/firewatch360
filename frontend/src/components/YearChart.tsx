@@ -1,16 +1,19 @@
 import { Area, CartesianGrid, ComposedChart, Legend, Line, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
+import { fmtCompact } from '../lib/color'
+import { METRIC, type Metric } from '../lib/metric'
 import type { ClimMonth, MonthRow } from '../types/api'
 
 interface Props {
   year: number
   months: ClimMonth[]
   rows: MonthRow[]
+  metric?: Metric
 }
 
 const n0 = (v: unknown): string => (typeof v === 'number' ? Math.round(v).toLocaleString() : Array.isArray(v) ? v.map(n0).join(' – ') : String(v))
 
 /** Selected year vs the baseline monthly median, with the P25–P75 band. */
-export default function YearChart({ year, months, rows }: Props) {
+export default function YearChart({ year, months, rows, metric = 'cell_days' }: Props) {
   const byMonth = new Map(rows.map((r) => [Number(r.month.slice(5, 7)), r]))
   const data = months.map((c) => {
     const r = byMonth.get(c.month)
@@ -23,13 +26,13 @@ export default function YearChart({ year, months, rows }: Props) {
     }
   })
   return (
-    <div className="h-72" role="img" aria-label={`Line chart of ${year} monthly fire cell-days against the baseline median and interquartile range`}>
+    <div className="h-72" role="img" aria-label={`Line chart of ${year} monthly ${METRIC[metric].long} against the baseline median and interquartile range`}>
       <ResponsiveContainer>
         <ComposedChart data={data} margin={{ top: 8, right: 12, bottom: 0, left: 4 }}>
           <CartesianGrid stroke="#1f2937" />
           <XAxis dataKey="name" stroke="#94a3b8" fontSize={11} />
-          <YAxis stroke="#94a3b8" fontSize={11} tickFormatter={(v: number) => (v >= 1000 ? `${v / 1000}k` : String(v))} />
-          <Tooltip contentStyle={{ background: '#0f172a', border: '1px solid #334155' }} formatter={(v) => n0(v)} />
+          <YAxis stroke="#94a3b8" fontSize={11} tickFormatter={(v: number) => fmtCompact(v)} />
+          <Tooltip contentStyle={{ background: '#0f172a', border: '1px solid #334155' }} formatter={(v) => `${n0(v)} ${METRIC[metric].unit}`} />
           <Legend />
           <Area dataKey="band" name="Baseline P25–P75" stroke="none" fill="#64748b" fillOpacity={0.35} isAnimationActive={false} />
           <Line dataKey="median" name="Baseline median" stroke="#cbd5e1" strokeDasharray="5 4" dot={false} strokeWidth={1.5} isAnimationActive={false} />

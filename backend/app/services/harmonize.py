@@ -31,6 +31,20 @@ CONFIDENCE_LEVELS = {
 }
 
 
+METRICS = {
+    "cell_days": "unique fire cell-days per month (VIIRS-equivalent after harmonization)",
+    "frp": "total fire radiative power per month, MW summed over detections (VIIRS-equivalent after harmonization)",
+}
+# A 0.01 deg cell counts as agricultural when at least this share of it is cropland or pasture/hay.
+AG_THRESHOLD_PCT = 50
+AG_FILTER_SQL = (f"NOT EXISTS (SELECT 1 FROM cropland c WHERE c.crop_pct >= {AG_THRESHOLD_PCT}"
+                 " AND c.gy = CAST(floor(latitude / 0.01 + 1e-9) AS BIGINT)"
+                 " AND c.gx = CAST(floor(longitude / 0.01 + 1e-9) AS BIGINT))")
+
+# Fit threshold for FRP: min_monthly_cell_days x a typical MODIS detection FRP (median ~23 MW, rounded).
+FRP_MW_PER_CELL_DAY = 20
+
+
 @dataclass(frozen=True)
 class HarmonizationParams:
     grid_deg: float = 0.01
@@ -38,6 +52,12 @@ class HarmonizationParams:
     vegetation_only: bool = True  # FIRMS type == 0 (presumed vegetation fire)
     min_overlap_months: int = 24
     min_monthly_cell_days: int = 5  # a month enters the fit only if MODIS >= this
+    # What is counted per month: unique fire cell-days (extent/frequency) or total fire
+    # radiative power summed over detections, in MW (intensity). Both use the same k/c pipeline.
+    metric: str = "cell_days"
+    # Drop detections in 0.01 deg cells that are mostly cropland or pasture (NLCD 2021, CONUS),
+    # i.e. presumed agricultural burning. Needs data/processed/cropland_cells.parquet.
+    exclude_agriculture: bool = False
 
     def validate(self) -> None:
         if not (0.001 <= self.grid_deg <= 1.0):
@@ -46,6 +66,13 @@ class HarmonizationParams:
             raise ValueError(f"min_confidence must be one of {sorted(CONFIDENCE_LEVELS)}")
         if self.min_overlap_months < 1 or self.min_monthly_cell_days < 1:
             raise ValueError("min_overlap_months and min_monthly_cell_days must be >= 1")
+        if self.metric not in METRICS:
+            raise ValueError(f"metric must be one of {sorted(METRICS)}")
+
+    @property
+    def min_fit_value(self) -> float:
+        """Smallest monthly MODIS value that enters a ratio fit, in the metric's units."""
+        return self.min_monthly_cell_days * (FRP_MW_PER_CELL_DAY if self.metric == "frp" else 1)
 
 
 # Only finally processed rows are used. NRT rows have no `type` and are provisional.
@@ -90,8 +117,8 @@ def monthly_cell_days(
     levels: tuple[str, ...] = PROCESSING_LEVELS,
     extra_where: str = "",
     extra_params: tuple = (),
-) -> dict[tuple[str, str], int]:
-    """Unique fire cell-days per (sensor, 'YYYY-MM') inside the AOI.
+) -> dict[tuple[str, str], float]:
+    """Unique fire cell-days (or, with metric='frp', total FRP in MW) per (sensor, 'YYYY-MM') inside the AOI.
 
     Keys: "MODIS", "VIIRS", and "MODIS_TERRA" (Terra-only, for the pre-Aqua correction).
     NRT rows have no `type`. When `vegetation_only` and NRT is requested, an NRT detection is
@@ -103,6 +130,8 @@ def monthly_cell_days(
     filters = [where, f"processing_level IN ({','.join('?' * len(levels))})",
                f"confidence_norm IN ({','.join('?' * len(conf))})"]
     params = [*params, *levels, *conf]
+    if p.exclude_agriculture:
+        filters.append(AG_FILTER_SQL)
     if extra_where:
         filters.append(extra_where)
         params += list(extra_params)
@@ -120,12 +149,13 @@ def monthly_cell_days(
             FROM hotspots WHERE processing_level = 'archive' AND type IN (1, 2, 3)
         ),"""
         mask_params = [p.grid_deg, p.grid_deg]
+    frp_col = " greatest(coalesce(frp, 0), 0) AS frp," if p.metric == "frp" else ""
     # The tiny epsilon keeps values on a cell edge (e.g. 37.12 / 0.01 = 3711.99999...)
     # in the cell they belong to.
     sql = f"""
         WITH {mask_cte}
         g AS (
-            SELECT sensor, satellite, acq_date, type, processing_level,
+            SELECT sensor, satellite, acq_date, type, processing_level,{frp_col}
                    CAST(floor(latitude / ? + 1e-9) AS BIGINT) AS gy,
                    CAST(floor(longitude / ? + 1e-9) AS BIGINT) AS gx
             FROM hotspots WHERE {' AND '.join(filters)}
@@ -138,6 +168,17 @@ def monthly_cell_days(
         )
         SELECT k AS sensor, strftime(acq_date, '%Y-%m') AS ym, count(*) AS n FROM cells GROUP BY 1, 2
     """
+    if p.metric == "frp":
+        # Intensity: every detection's FRP (negative MODIS retrievals clipped to 0), not deduplicated.
+        sql = sql[:sql.index("cells AS (")] + """dets AS (
+            SELECT sensor AS k, acq_date, frp FROM base
+            UNION ALL
+            SELECT 'MODIS_TERRA' AS k, acq_date, frp FROM base WHERE sensor = 'MODIS' AND satellite = 'Terra'
+        )
+        SELECT k AS sensor, strftime(acq_date, '%Y-%m') AS ym, sum(frp) AS n FROM dets GROUP BY 1, 2
+    """
+        rows = store.query(sql, [*mask_params, p.grid_deg, p.grid_deg, *params], aoi=aoi)
+        return {(r["sensor"], r["ym"]): float(r["n"]) for r in rows}
     rows = store.query(sql, [*mask_params, p.grid_deg, p.grid_deg, *params], aoi=aoi)
     return {(r["sensor"], r["ym"]): int(r["n"]) for r in rows}
 
@@ -344,7 +385,7 @@ class Harmonizer:
     def _fit_pair(self, counts: dict, xkey: str, ykey: str, window: list[str], p: HarmonizationParams):
         x = np.array([counts.get((xkey, m), 0) for m in window], float)
         y = np.array([counts.get((ykey, m), 0) for m in window], float)
-        use = x >= p.min_monthly_cell_days
+        use = x >= p.min_fit_value
         months = [m for m, u in zip(window, use) if u]
         if use.sum() < p.min_overlap_months:
             return None, months
@@ -376,7 +417,7 @@ class Harmonizer:
                 fit = {"c": fit.pop("k"), **fit}
             return {
                 **fit, "status": status, "scope": scope, "aoi_usable_months": len(used),
-                "model": "MODIS(Terra+Aqua) = c * MODIS(Terra only) (least squares through origin, monthly unique fire cell-days)",
+                "model": f"MODIS(Terra+Aqua) = c * MODIS(Terra only) (least squares through origin, monthly {'total FRP' if p.metric == 'frp' else 'unique fire cell-days'})",
                 "fit_window": w["terra_fit_window"],
                 "applies_before": w["aqua_month"],
             }
@@ -409,7 +450,7 @@ class Harmonizer:
                     "status": status,
                     "scope": scope,
                     "aoi_usable_months": len(used),
-                    "model": "VIIRS = k * MODIS (least squares through origin, monthly unique fire cell-days)",
+                    "model": f"VIIRS = k * MODIS (least squares through origin, monthly {'total FRP' if p.metric == 'frp' else 'unique fire cell-days'})",
                     "overlap_window": [w["switch_month"], w["overlap_end"]],
                 },
                 "terra_correction": self.terra_correction(aoi, p),
@@ -490,6 +531,7 @@ class Harmonizer:
             "aoi": aoi.describe(),
             "parameters": {**asdict(p), "processing_levels": list(PROCESSING_LEVELS)},
             "windows": w,
-            "units": "unique fire cell-days per month (VIIRS-equivalent after harmonization)",
+            "metric": p.metric,
+            "units": METRICS[p.metric],
             "caveat": "Prototype parameters requiring scientific validation. Not an official NASA algorithm. Not a forecast.",
         }

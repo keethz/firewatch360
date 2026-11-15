@@ -287,15 +287,16 @@ def padus_features(client: httpx.Client, g: shapely.Geometry, max_features: int 
     return {"features": feats[:max_features], "truncated": len(feats) >= max_features}
 
 
-def nlcd_histogram(client: httpx.Client, g: shapely.Geometry, zone_lonlat: shapely.Geometry | None) -> dict:
-    """NLCD 2021 class areas (km²) inside g and inside g ∩ fire zone, from a WCS raster."""
+def nlcd_histogram(client: httpx.Client, g: shapely.Geometry, zone_lonlat: shapely.Geometry | None,
+                   coverage: str = NLCD_COVERAGE) -> dict:
+    """NLCD class areas (2021 unless another epoch's `coverage` is given) (km²) inside g and inside g ∩ fire zone, from a WCS raster."""
     to5070 = Transformer.from_crs(4326, 5070, always_xy=True)
     g5070 = shp_transform(to5070.transform, g)
     x0, y0, x1, y1 = g5070.bounds
     side = max(x1 - x0, y1 - y0)
     scale = min(1.0, NLCD_MAX_PX * 30.0 / side)
     r = client.get(NLCD_URL, params=[
-        ("service", "WCS"), ("version", "2.0.1"), ("request", "GetCoverage"), ("coverageId", NLCD_COVERAGE),
+        ("service", "WCS"), ("version", "2.0.1"), ("request", "GetCoverage"), ("coverageId", coverage),
         ("subset", f"X({x0},{x1})"), ("subset", f"Y({y0},{y1})"), ("scaleFactor", f"{scale:.6f}"),
         ("format", "image/geotiff")])
     r.raise_for_status()
